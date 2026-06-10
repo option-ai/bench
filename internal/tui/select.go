@@ -7,15 +7,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-)
-
-var (
-	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63"))
-	cursorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("84"))
-	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	helpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).MarginTop(1)
 )
 
 // Item is one selectable row.
@@ -82,25 +73,25 @@ func (m selectModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(m.title) + "\n\n")
+	b.WriteString(stTitle.Render(m.title) + "\n\n")
 	for i, it := range m.items {
 		cursor := "  "
 		if i == m.cursor {
-			cursor = cursorStyle.Render("▸ ")
+			cursor = stPick.Render("▸ ")
 		}
 		mark := " "
 		if m.multi {
 			if m.chosen[i] {
-				mark = selectedStyle.Render("◉")
+				mark = stSelected.Render("◉")
 			} else {
 				mark = "◯"
 			}
 		} else if i == m.cursor {
-			mark = cursorStyle.Render("•")
+			mark = stPick.Render("•")
 		}
 		line := fmt.Sprintf("%s%s %s", cursor, mark, it.Label)
 		if it.Desc != "" {
-			line += "  " + dimStyle.Render(it.Desc)
+			line += "  " + stDim.Render(it.Desc)
 		}
 		b.WriteString(line + "\n")
 	}
@@ -108,7 +99,7 @@ func (m selectModel) View() string {
 	if m.multi {
 		hint = "↑/↓ move · space toggle · a all · enter confirm · q cancel"
 	}
-	b.WriteString(helpStyle.Render(hint))
+	b.WriteString(stHelp.Render(hint))
 	return b.String()
 }
 

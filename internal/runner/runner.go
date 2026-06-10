@@ -34,6 +34,29 @@ const (
 	StageError  Stage = "error"
 )
 
+// Label is the human-friendly name shown in the UI. It avoids leaking internal
+// terms and stays accurate for scratch evals (which set up a workspace rather
+// than cloning).
+func (s Stage) Label() string {
+	switch s {
+	case StageQueued:
+		return "queued"
+	case StageClone:
+		return "preparing workspace"
+	case StageAgent:
+		return "running agent"
+	case StageGates:
+		return "running checks"
+	case StageJudge:
+		return "judging"
+	case StageDone:
+		return "done"
+	case StageError:
+		return "error"
+	}
+	return string(s)
+}
+
 // Event is a progress update for one job.
 type Event struct {
 	Eval  string

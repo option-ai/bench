@@ -8,17 +8,15 @@ import (
 	"github.com/abdul/bench/internal/adapter"
 	"github.com/abdul/bench/internal/config"
 	"github.com/abdul/bench/internal/runner"
-	"github.com/abdul/bench/internal/score"
 	"github.com/abdul/bench/internal/snapshot"
 	"github.com/abdul/bench/internal/tui"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagTimeout   time.Duration
-	flagJudgeTO   time.Duration
-	flagJudgeRef  string
+	flagTimeout  time.Duration
+	flagJudgeTO  time.Duration
+	flagJudgeRef string
 )
 
 var runCmd = &cobra.Command{
@@ -47,7 +45,11 @@ var runCmd = &cobra.Command{
 		// 1. pick evals
 		evalItems := make([]tui.Item, len(snaps))
 		for i, s := range snaps {
-			evalItems[i] = tui.Item{Label: s.Title, Desc: fmt.Sprintf("%s@%.8s", s.Repo, s.Commit)}
+			anchor := "scratch"
+			if !s.IsScratch() {
+				anchor = fmt.Sprintf("%s@%.8s", s.Repo, s.Commit)
+			}
+			evalItems[i] = tui.Item{Label: s.Title, Desc: anchor}
 		}
 		ei, err := tui.PickMany("Select evals to run", evalItems)
 		if err != nil {
@@ -82,27 +84,50 @@ var runCmd = &cobra.Command{
 			judge = models[ji]
 		}
 
-		// 4. run with live progress
-		fmt.Printf("\nRunning %d eval(s) × %d model(s), judge=%s\n\n", len(selEvals), len(selModels), judge.Ref())
-		events := make(chan runner.Event, 128)
-		go drainEvents(events)
+		// 4. run with a live, aligned progress view
+		fmt.Printf("\nRunning %d eval(s) × %d model(s) · judge %s\n\n", len(selEvals), len(selModels), judge.Ref())
 
-		res, err := runner.Run(context.Background(), runner.Options{
-			Evals:       selEvals,
-			Models:      selModels,
-			Judge:       judge,
-			Cfg:         cfg,
-			AgentBudget: adapter.Budget{Timeout: flagTimeout},
-			JudgeTO:     flagJudgeTO,
-			Now:         time.Now(),
-			Events:      events,
-		})
-		close(events)
-		if err != nil {
+		events := make(chan runner.Event, 256)
+		resCh := make(chan *runner.RunResult, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			r, err := runner.Run(context.Background(), runner.Options{
+				Evals:       selEvals,
+				Models:      selModels,
+				Judge:       judge,
+				Cfg:         cfg,
+				AgentBudget: adapter.Budget{Timeout: flagTimeout},
+				JudgeTO:     flagJudgeTO,
+				Now:         time.Now(),
+				Events:      events,
+			})
+			close(events)
+			if err != nil {
+				errCh <- err
+			} else {
+				resCh <- r
+			}
+		}()
+
+		evalLabels := make([]string, len(selEvals))
+		for i, e := range selEvals {
+			evalLabels[i] = e.Title
+		}
+		modelLabels := make([]string, len(selModels))
+		for i, m := range selModels {
+			modelLabels[i] = m.Ref()
+		}
+		if err := tui.RunProgress(evalLabels, modelLabels, events); err != nil {
 			return err
 		}
-		renderLeaderboard(res)
-		fmt.Printf("\nFull results: %s/run.json\n", res.Dir)
+
+		select {
+		case err := <-errCh:
+			return err
+		case res := <-resCh:
+			fmt.Print(tui.RenderResults(res))
+			fmt.Printf("\nFull results: %s/run.json\n", res.Dir)
+		}
 		return nil
 	},
 }
@@ -120,37 +145,3 @@ func pick[T any](all []T, idxs []int) []T {
 	}
 	return out
 }
-
-func drainEvents(ch <-chan runner.Event) {
-	for e := range ch {
-		if e.Stage == runner.StageError {
-			fmt.Printf("  ✗ %-24s %-22s %v\n", e.Eval, e.Model, e.Err)
-			continue
-		}
-		fmt.Printf("  · %-24s %-22s %s\n", e.Eval, e.Model, e.Stage)
-	}
-}
-
-var (
-	hdr  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63"))
-	good = lipgloss.NewStyle().Foreground(lipgloss.Color("84"))
-)
-
-func renderLeaderboard(res *runner.RunResult) {
-	fmt.Println("\n" + hdr.Render("Leaderboard"))
-	for rank, row := range res.Leaderboard {
-		fmt.Printf("  %d. %-24s %s  (%d run(s))\n",
-			rank+1, row.Model, good.Render(fmt.Sprintf("%.1f", row.Score)), row.Runs)
-	}
-	fmt.Println("\n" + hdr.Render("Per-eval breakdown"))
-	for _, r := range res.Results {
-		score := fmt.Sprintf("%.1f", r.Composite)
-		if r.Err != "" {
-			score = "ERR"
-		}
-		fmt.Printf("  %-24s %-22s %5s   judge=%.0f gate=%.2f\n",
-			r.Eval, r.Model, score, r.JudgeOverall, r.GateFactor)
-	}
-}
-
-var _ = score.Result{} // score types referenced via runner

@@ -135,7 +135,7 @@ func generate(ctx context.Context, ref adapter.ModelRef, prompt string, timeout 
 	case "claude-code":
 		name, args = "claude", []string{"-p", prompt, "--model", ref.Model}
 	case "codex":
-		name, args = "codex", []string{"exec", "--model", ref.Model, prompt}
+		name, args = "codex", []string{"exec", "--model", ref.Model, "--skip-git-repo-check", prompt}
 	case "cursor-agent":
 		name, args = "cursor-agent", []string{"-p", prompt, "--model", ref.Model}
 	case "opencode":

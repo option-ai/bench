@@ -1,6 +1,11 @@
 package adapter
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+)
 
 // Model lists are intentionally static and editable: bench treats them as the
 // menu of selectable ids, not a source of truth about what each provider
@@ -51,7 +56,40 @@ type codex struct{}
 func (codex) ID() string      { return "codex" }
 func (codex) Available() bool { return onPath("codex") }
 func (codex) Models() []string {
-	return []string{"gpt-5-codex", "gpt-5"}
+	if m := codexCachedModels(); len(m) > 0 {
+		return m
+	}
+	return []string{"gpt-5.5"} // safe fallback
+}
+
+// codexCachedModels reads the models Codex itself advertises for this account
+// (~/.codex/models_cache.json), so the menu matches what the login can actually
+// run instead of guessing.
+func codexCachedModels() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	b, err := os.ReadFile(filepath.Join(home, ".codex", "models_cache.json"))
+	if err != nil {
+		return nil
+	}
+	var doc struct {
+		Models []struct {
+			Slug       string `json:"slug"`
+			Visibility string `json:"visibility"`
+		} `json:"models"`
+	}
+	if json.Unmarshal(b, &doc) != nil {
+		return nil
+	}
+	var out []string
+	for _, m := range doc.Models {
+		if m.Slug != "" && m.Visibility == "list" {
+			out = append(out, m.Slug)
+		}
+	}
+	return out
 }
 func (codex) Auth() AuthInfo {
 	return AuthInfo{LoginCmd: "codex login", Note: "Uses your ChatGPT/Codex login — not an API key."}
@@ -62,7 +100,8 @@ func (c *codex) Run(ctx context.Context, dir string, turns []string, model strin
 	// so sequential turns run fresh against the (already-modified) tree.
 	var last string
 	for _, t := range turns {
-		out, err := run(ctx, dir, b, "codex", "exec", "--model", model, "--full-auto", t)
+		out, err := run(ctx, dir, b, "codex", "exec", "--model", model,
+			"--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", t)
 		last = string(out)
 		if err != nil {
 			return last, err
