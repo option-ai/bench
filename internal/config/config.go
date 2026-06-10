@@ -82,6 +82,9 @@ type Config struct {
 	Concurrency   int           `json:"concurrency"`
 	Rubric        RubricWeights `json:"rubric"`
 	Gates         GateWeights   `json:"gates"`
+	// Models optionally overrides an agent's selectable model list, keyed by
+	// agent id (e.g. "claude-code"). Empty/absent => use the agent's built-ins.
+	Models map[string][]string `json:"models,omitempty"`
 }
 
 // Default returns the baseline config used on first run.

@@ -36,7 +36,7 @@ var runCmd = &cobra.Command{
 			fmt.Println("No evals yet. Capture one with /add-to-bench inside Claude Code.")
 			return nil
 		}
-		models := adapter.AvailableModels()
+		models := adapter.AvailableModelsWith(cfg.Models)
 		if len(models) == 0 {
 			fmt.Println("No coding agents found on PATH (claude, codex, cursor-agent, opencode).")
 			return nil

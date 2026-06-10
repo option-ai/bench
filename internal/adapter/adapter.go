@@ -84,15 +84,25 @@ func ParseRef(s string) (ModelRef, error) {
 	return ModelRef{Agent: s[:i], Model: s[i+1:]}, nil
 }
 
-// AvailableModels returns every (agent, model) ref for installed agents,
-// sorted. This is the set the run TUI filters models against.
-func AvailableModels() []ModelRef {
+// AvailableModels returns every (agent, model) ref for installed agents using
+// each agent's built-in model list.
+func AvailableModels() []ModelRef { return AvailableModelsWith(nil) }
+
+// AvailableModelsWith is like AvailableModels but lets config.json override an
+// agent's model list (keyed by agent id). An override fully replaces the
+// built-in list for that agent, so users can add models (e.g. a new Claude
+// release) without waiting on a code change.
+func AvailableModelsWith(overrides map[string][]string) []ModelRef {
 	var out []ModelRef
 	for _, a := range registry {
 		if !a.Available() {
 			continue
 		}
-		for _, m := range a.Models() {
+		models := a.Models()
+		if ov, ok := overrides[a.ID()]; ok && len(ov) > 0 {
+			models = ov
+		}
+		for _, m := range models {
 			out = append(out, ModelRef{Agent: a.ID(), Model: m})
 		}
 	}

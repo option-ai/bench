@@ -68,7 +68,7 @@ var setupCmd = &cobra.Command{
 
 		// 3. default judge
 		fmt.Println(sSect.Render("Judge"))
-		models := adapter.AvailableModels()
+		models := adapter.AvailableModelsWith(cfg.Models)
 		items := make([]tui.Item, len(models))
 		for i, m := range models {
 			items[i] = tui.Item{Label: m.Ref(), Desc: m.Agent}

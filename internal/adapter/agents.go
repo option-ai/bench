@@ -25,7 +25,7 @@ type claudeCode struct{}
 func (claudeCode) ID() string      { return "claude-code" }
 func (claudeCode) Available() bool { return onPath("claude") }
 func (claudeCode) Models() []string {
-	return []string{"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"}
+	return []string{"claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"}
 }
 func (claudeCode) Auth() AuthInfo {
 	return AuthInfo{Note: "Uses your Claude Code login/subscription. Log in by running `claude` and using /login (or `claude setup-token`)."}
