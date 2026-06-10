@@ -22,8 +22,9 @@ type progressModel struct {
 	wEval  int
 	wModel int
 	events <-chan runner.Event
-	spin   spinner.Model
-	done   bool
+	spin        spinner.Model
+	done        bool
+	interrupted bool
 }
 
 func waitEvent(ch <-chan runner.Event) tea.Cmd {
@@ -58,6 +59,7 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			m.interrupted = true
 			return m, tea.Quit
 		}
 	}
@@ -90,8 +92,10 @@ func (m progressModel) View() string {
 }
 
 // RunProgress renders a live, aligned status view that updates in place as the
-// runner emits events, until the events channel closes.
-func RunProgress(evals, models []string, events <-chan runner.Event) error {
+// runner emits events, until the events channel closes. It returns
+// interrupted=true if the user hit ctrl+c before the run finished — the caller
+// must then cancel the run and drain the events channel.
+func RunProgress(evals, models []string, events <-chan runner.Event) (interrupted bool, err error) {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = stPick
@@ -111,8 +115,11 @@ func RunProgress(evals, models []string, events <-chan runner.Event) error {
 			m.stage[k] = runner.StageQueued
 		}
 	}
-	_, err := tea.NewProgram(m).Run()
-	return err
+	out, err := tea.NewProgram(m).Run()
+	if err != nil {
+		return false, err
+	}
+	return out.(progressModel).interrupted, nil
 }
 
 // RenderResults produces the final leaderboard + per-eval breakdown as aligned,
@@ -176,4 +183,18 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// RunProgressPlain consumes events and prints one aligned line per update —
+// the fallback when stdout isn't a TTY (scripts, CI, piped output), where the
+// live in-place view can't run.
+func RunProgressPlain(evals, models []string, events <-chan runner.Event) {
+	we, wm := width(evals), width(models)
+	for e := range events {
+		status := e.Stage.Label()
+		if e.Stage == runner.StageError && e.Err != nil {
+			status = "error: " + e.Err.Error()
+		}
+		fmt.Printf("  %s  %s  %s\n", pad(e.Eval, we), pad(e.Model, wm), status)
+	}
 }

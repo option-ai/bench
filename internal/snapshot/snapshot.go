@@ -58,9 +58,8 @@ func Parse(raw []byte) (*Snapshot, error) {
 		return nil, fmt.Errorf("parse frontmatter: %w", err)
 	}
 	s.Prompts = parsePrompts(string(m[2]))
-	if s.Replay == "" {
-		s.Replay = config.ReplayOneShot
-	}
+	// Replay is left empty when unset; the runner falls back to the config
+	// default (and ultimately oneshot).
 	return &s, nil
 }
 

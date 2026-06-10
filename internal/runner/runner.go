@@ -99,9 +99,15 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 	if err := config.EnsureDirs(); err != nil {
 		return nil, err
 	}
-	runID := o.Now.Format("2006-01-02T15-04-05")
+	runID := fmt.Sprintf("%s-%03d", o.Now.Format("2006-01-02T15-04-05"), o.Now.Nanosecond()/1e6)
 	runDir := filepath.Join(config.RunsDir(), runID)
-	work := filepath.Join(runDir, "work")
+	// Workspaces live under a ".claude/worktrees" path segment on purpose:
+	// Claude Code setups commonly enforce "isolate into a worktree unless
+	// already under .claude/worktrees/" via hooks or global instructions, and
+	// an agent that obeys mid-eval would do its work in a nested worktree the
+	// diff capture can't see. This path makes such policies treat the job
+	// workspace as already isolated.
+	work := filepath.Join(runDir, "work", ".claude", "worktrees")
 	if err := os.MkdirAll(work, 0o755); err != nil {
 		return nil, err
 	}
@@ -125,6 +131,21 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 		}
 		clones[repo] = dest
 		return dest, nil
+	}
+
+	// Serialize worktree adds per cache repo: concurrent `git worktree add`
+	// on one repo contends on git's internal locks.
+	wtLocks := map[string]*sync.Mutex{}
+	var wtLockMu sync.Mutex
+	lockFor := func(repo string) *sync.Mutex {
+		wtLockMu.Lock()
+		defer wtLockMu.Unlock()
+		if l, ok := wtLocks[repo]; ok {
+			return l
+		}
+		l := &sync.Mutex{}
+		wtLocks[repo] = l
+		return l
 	}
 
 	// Build the job matrix.
@@ -153,10 +174,11 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			results[i] = runJob(ctx, o, j.eval, j.model, work, cloneRepo)
+			results[i] = runJob(ctx, o, j.eval, j.model, work, runDir, cloneRepo, lockFor)
 		}(i, j)
 	}
 	wg.Wait()
+	_ = os.RemoveAll(filepath.Join(runDir, "work")) // jobs cleaned their trees; drop the shell
 
 	res := &RunResult{
 		ID:          runID,
@@ -173,7 +195,7 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 	return res, nil
 }
 
-func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.ModelRef, work string, cloneRepo func(string) (string, error)) score.Result {
+func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.ModelRef, work, runDir string, cloneRepo func(string) (string, error), lockFor func(string) *sync.Mutex) score.Result {
 	r := score.Result{Eval: e.Title, Model: m.Ref()}
 	fail := func(stage Stage, err error) score.Result {
 		emit(o.Events, Event{e.Title, m.Ref(), StageError, err})
@@ -185,19 +207,28 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 	// git-initialised scratch dir for evals captured without a repo.
 	emit(o.Events, Event{e.Title, m.Ref(), StageClone, nil})
 	wt := filepath.Join(work, snapshot.Slug(e.Title)+"__"+snapshot.Slug(m.Ref()))
+	var cache string
 	if e.IsScratch() {
 		if err := scratchWorkspace(ctx, wt); err != nil {
 			return fail(StageClone, err)
 		}
 	} else {
-		cache, err := cloneRepo(e.Repo)
+		var err error
+		cache, err = cloneRepo(e.Repo)
 		if err != nil {
 			return fail(StageClone, err)
 		}
-		if err := gitWorktreeAdd(ctx, cache, wt, e.Commit); err != nil {
+		l := lockFor(cache)
+		l.Lock()
+		err = gitWorktreeAdd(ctx, cache, wt, e.Commit)
+		l.Unlock()
+		if err != nil {
 			return fail(StageClone, err)
 		}
 	}
+	// The worktree only holds intermediate state; the diff + output artifacts
+	// are persisted under the run dir, so always clean the tree up.
+	defer cleanupWorkspace(cache, wt)
 
 	// 2. drive the agent. Collapse prompts for oneshot replay. Capture its final
 	// written output so text-answer evals are gradable even with no file changes.
@@ -206,17 +237,19 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 	if ag == nil || !ag.Available() {
 		return fail(StageAgent, fmt.Errorf("agent %q unavailable", m.Agent))
 	}
-	turns := buildTurns(e)
+	turns := buildTurns(e, o.Cfg)
 	output, err := ag.Run(ctx, wt, turns, m.Model, o.AgentBudget)
 	if err != nil {
 		return fail(StageAgent, err)
 	}
 
-	// 3. capture the diff (including new files; empty for pure text answers).
+	// 3. capture the diff (including new files; empty for pure text answers)
+	// and persist both artifacts so the run is inspectable after cleanup.
 	diff, err := gitCaptureDiff(ctx, wt)
 	if err != nil {
 		return fail(StageAgent, err)
 	}
+	saveArtifacts(runDir, e.Title, m.Ref(), diff, output)
 
 	// 4. deterministic gates.
 	emit(o.Events, Event{e.Title, m.Ref(), StageGates, nil})
@@ -238,9 +271,14 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 }
 
 // buildTurns collapses prompts into a single turn for oneshot replay, or
-// returns them as-is for sequential.
-func buildTurns(e *snapshot.Snapshot) []string {
-	if e.Replay == config.ReplaySequential {
+// returns them as-is for sequential. An eval without an explicit replay mode
+// uses the config default.
+func buildTurns(e *snapshot.Snapshot, cfg config.Config) []string {
+	mode := e.Replay
+	if mode == "" {
+		mode = cfg.DefaultReplay
+	}
+	if mode == config.ReplaySequential {
 		return e.Prompts
 	}
 	var b strings.Builder
@@ -260,11 +298,7 @@ func runGates(ctx context.Context, dir string, g snapshot.Gates, timeout time.Du
 	}
 	if g.Test != "" {
 		ok := shellOK(ctx, dir, g.Test, timeout)
-		ratio := 0.0
-		if ok {
-			ratio = 1.0
-		}
-		res.Test = score.TestOutcome{Ran: true, Passed: ok, Ratio: ratio}
+		res.Test = score.TestOutcome{Ran: true, Passed: ok}
 	}
 	if g.Lint != "" {
 		ok := shellOK(ctx, dir, g.Lint, timeout)

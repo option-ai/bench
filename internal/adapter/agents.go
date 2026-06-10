@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/abdul/bench/internal/config"
 )
 
-// Model lists are intentionally static and editable: bench treats them as the
-// menu of selectable ids, not a source of truth about what each provider
-// currently ships. Adjust per your access. Availability is binary-on-PATH.
+// Model lists are a menu, not a source of truth: codex and opencode are read
+// from the tools themselves; the rest are editable defaults. Any agent's list
+// can be overridden via the "models" map in config.json.
 
 func init() {
 	Register(&claudeCode{})
@@ -32,21 +37,26 @@ func (claudeCode) Auth() AuthInfo {
 }
 
 func (c *claudeCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+	ctx, cancel := b.WithTimeout(ctx)
+	defer cancel()
 	// First turn starts a fresh session; later turns resume it so sequential
-	// replay keeps conversation memory.
+	// replay keeps conversation memory. claude -p output is the final message.
+	// --setting-sources project: the user's personal global CLAUDE.md must not
+	// leak into a benchmark run (it varies per user and can redirect the agent,
+	// e.g. a global worktree policy). The repo's own CLAUDE.md still loads.
 	var last string
 	for i, t := range turns {
-		args := []string{"-p", t, "--model", model, "--dangerously-skip-permissions"}
+		args := []string{"-p", t, "--model", model, "--dangerously-skip-permissions", "--setting-sources", "project"}
 		if i > 0 {
 			args = append(args, "--continue")
 		}
-		out, err := run(ctx, dir, b, "claude", args...)
-		last = string(out)
+		out, err := run(ctx, dir, "claude", args...)
+		last = stripANSI(string(out))
 		if err != nil {
 			return last, err
 		}
 	}
-	return last, nil
+	return strings.TrimSpace(last), nil
 }
 
 // ---- Codex CLI -------------------------------------------------------------
@@ -60,6 +70,32 @@ func (codex) Models() []string {
 		return m
 	}
 	return []string{"gpt-5.5"} // safe fallback
+}
+func (codex) Auth() AuthInfo {
+	return AuthInfo{LoginCmd: "codex login", Note: "Uses your ChatGPT/Codex login — not an API key."}
+}
+
+func (c *codex) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+	ctx, cancel := b.WithTimeout(ctx)
+	defer cancel()
+	// --output-last-message gives the agent's clean final message; codex's
+	// stdout banners (hooks, token counts) would otherwise fingerprint the tool
+	// to the judge.
+	var last string
+	for _, t := range turns {
+		msgFile := filepath.Join(os.TempDir(), "bench-codex-"+randSuffix())
+		_, err := run(ctx, dir, "codex", "exec", "--model", model,
+			"--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check",
+			"--output-last-message", msgFile, t)
+		if msg, rerr := os.ReadFile(msgFile); rerr == nil {
+			last = strings.TrimSpace(string(msg))
+			_ = os.Remove(msgFile)
+		}
+		if err != nil {
+			return last, err
+		}
+	}
+	return last, nil
 }
 
 // codexCachedModels reads the models Codex itself advertises for this account
@@ -91,24 +127,6 @@ func codexCachedModels() []string {
 	}
 	return out
 }
-func (codex) Auth() AuthInfo {
-	return AuthInfo{LoginCmd: "codex login", Note: "Uses your ChatGPT/Codex login — not an API key."}
-}
-
-func (c *codex) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
-	// codex exec is non-interactive. It has no cross-call session resume here,
-	// so sequential turns run fresh against the (already-modified) tree.
-	var last string
-	for _, t := range turns {
-		out, err := run(ctx, dir, b, "codex", "exec", "--model", model,
-			"--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", t)
-		last = string(out)
-		if err != nil {
-			return last, err
-		}
-	}
-	return last, nil
-}
 
 // ---- cursor-agent ----------------------------------------------------------
 
@@ -117,17 +135,22 @@ type cursorAgent struct{}
 func (cursorAgent) ID() string      { return "cursor-agent" }
 func (cursorAgent) Available() bool { return onPath("cursor-agent") }
 func (cursorAgent) Models() []string {
-	return []string{"auto", "claude-sonnet-4-6", "gpt-5"}
+	// cursor-agent has no model-enumeration command, and guessed ids fail at
+	// runtime (the codex lesson). "auto" is the only id guaranteed valid; add
+	// specific models via the config.json "models" override.
+	return []string{"auto"}
 }
 func (cursorAgent) Auth() AuthInfo {
 	return AuthInfo{LoginCmd: "cursor-agent login", Note: "Uses your Cursor login."}
 }
 
 func (c *cursorAgent) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+	ctx, cancel := b.WithTimeout(ctx)
+	defer cancel()
 	var last string
 	for _, t := range turns {
-		out, err := run(ctx, dir, b, "cursor-agent", "-p", t, "--model", model, "--force")
-		last = string(out)
+		out, err := run(ctx, dir, "cursor-agent", "-p", t, "--model", model, "--force", "--output-format", "text")
+		last = strings.TrimSpace(stripANSI(string(out)))
 		if err != nil {
 			return last, err
 		}
@@ -142,20 +165,73 @@ type openCode struct{}
 func (openCode) ID() string      { return "opencode" }
 func (openCode) Available() bool { return onPath("opencode") }
 func (openCode) Models() []string {
-	return []string{"anthropic/claude-opus-4-8", "openai/gpt-5"}
+	if m := opencodeModels(); len(m) > 0 {
+		return m
+	}
+	return []string{"anthropic/claude-opus-4-8"} // fallback if enumeration fails
 }
 func (openCode) Auth() AuthInfo {
 	return AuthInfo{LoginCmd: "opencode auth login", Note: "Configure providers via opencode's own auth."}
 }
 
 func (c *openCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+	ctx, cancel := b.WithTimeout(ctx)
+	defer cancel()
 	var last string
 	for _, t := range turns {
-		out, err := run(ctx, dir, b, "opencode", "run", "--model", model, t)
-		last = string(out)
+		out, err := run(ctx, dir, "opencode", "run", "--model", model, t)
+		last = strings.TrimSpace(stripANSI(string(out)))
 		if err != nil {
 			return last, err
 		}
 	}
 	return last, nil
+}
+
+var opencodeOnce struct {
+	sync.Once
+	models []string
+}
+
+// opencodeModels enumerates models from `opencode models` itself, cached on
+// disk for a day (the command takes ~2s) and in-process for the run.
+func opencodeModels() []string {
+	opencodeOnce.Do(func() {
+		cacheFile := filepath.Join(config.CacheDir(), "opencode-models.txt")
+		if st, err := os.Stat(cacheFile); err == nil && time.Since(st.ModTime()) < 24*time.Hour {
+			if b, err := os.ReadFile(cacheFile); err == nil {
+				opencodeOnce.models = splitLines(string(b))
+				return
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		out, err := run(ctx, "", "opencode", "models")
+		if err != nil {
+			return
+		}
+		models := splitLines(stripANSI(string(out)))
+		if len(models) == 0 {
+			return
+		}
+		_ = os.MkdirAll(config.CacheDir(), 0o755)
+		_ = os.WriteFile(cacheFile, []byte(strings.Join(models, "\n")), 0o644)
+		opencodeOnce.models = models
+	})
+	return opencodeOnce.models
+}
+
+func splitLines(s string) []string {
+	var out []string
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimSpace(l); l != "" && strings.Contains(l, "/") {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// randSuffix is unique enough for temp filenames without importing math/rand.
+func randSuffix() string {
+	return time.Now().Format("150405.000000000")
 }

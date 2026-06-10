@@ -1,7 +1,8 @@
-// Package judge runs a model as a blind grader of a diff. The judge is given
-// the task (the user prompts), the optional feedback rubric, and the diff. It
-// is NOT told which agent or model produced the diff, and never sees the
-// agent's reasoning. That blindness is the point.
+// Package judge runs a model as a blind grader of an agent's work. The judge is
+// given the task (the user prompts), the optional feedback rubric, and the work
+// (diff and/or written answer). It is NOT told which agent or model produced
+// it, never sees the agent's reasoning, and runs in an empty directory so it
+// cannot inspect the workspace. That blindness is the point.
 package judge
 
 import (
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -17,6 +19,14 @@ import (
 	"github.com/abdul/bench/internal/adapter"
 	"github.com/abdul/bench/internal/score"
 )
+
+// maxDiffBytes caps how much diff the judge sees. Beyond this we truncate with
+// a marker: an unbounded diff blows the judge's context (and argv limits)
+// silently, which is worse than an honest cut.
+const maxDiffBytes = 80_000
+
+// maxOutputBytes caps the agent's written answer shown to the judge.
+const maxOutputBytes = 40_000
 
 // Input is everything the judge is allowed to see.
 type Input struct {
@@ -34,8 +44,9 @@ type rawScore struct {
 	Rationale         string  `json:"rationale"`
 }
 
-// Judge grades the diff, sampling `samples` times and taking the per-dimension
-// median for stability. Returns sub-scores and the rationale from the median run.
+// Judge grades the work, sampling `samples` times and taking the per-dimension
+// median for stability. The rationale returned is the last sample's (a single
+// representative explanation; medians don't have one).
 func Judge(ctx context.Context, ref adapter.ModelRef, in Input, samples int, timeout time.Duration) (score.Subscores, string, error) {
 	if samples < 1 {
 		samples = 1
@@ -69,6 +80,18 @@ func Judge(ctx context.Context, ref adapter.ModelRef, in Input, samples int, tim
 	}, rationale, nil
 }
 
+// truncate cuts s at limit bytes on a line boundary, appending a marker.
+func truncate(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	cut := s[:limit]
+	if i := strings.LastIndexByte(cut, '\n'); i > 0 {
+		cut = cut[:i]
+	}
+	return cut + fmt.Sprintf("\n... [truncated: %d bytes omitted]", len(s)-len(cut))
+}
+
 func buildPrompt(in Input) string {
 	var b strings.Builder
 	b.WriteString(`You are a strict, impartial judge in an LLM benchmark.
@@ -100,11 +123,11 @@ Respond with ONLY a JSON object, no prose around it:
 	hasOut := strings.TrimSpace(in.Output) != ""
 	if hasDiff {
 		b.WriteString("\n== DIFF (files changed/created) ==\n")
-		b.WriteString(in.Diff + "\n")
+		b.WriteString(truncate(in.Diff, maxDiffBytes) + "\n")
 	}
 	if hasOut {
 		b.WriteString("\n== AGENT WRITTEN ANSWER ==\n")
-		b.WriteString(in.Output + "\n")
+		b.WriteString(truncate(in.Output, maxOutputBytes) + "\n")
 	}
 	if !hasDiff && !hasOut {
 		b.WriteString("\n== AGENT WORK ==\n(the agent produced no file changes and no answer)\n")
@@ -126,33 +149,57 @@ func parse(out string) (rawScore, error) {
 	return rs, nil
 }
 
-// generate invokes a model purely as a text generator (no file access) and
-// returns stdout. Command shape is per-agent; the judge only needs the text.
+// generate invokes a model purely as a text generator and returns its answer.
+// The prompt goes via stdin (argv has hard size limits), and the command runs
+// in a fresh empty directory so a tool-capable judge cannot inspect any
+// workspace or repo.
 func generate(ctx context.Context, ref adapter.ModelRef, prompt string, timeout time.Duration) (string, error) {
-	var name string
-	var args []string
-	switch ref.Agent {
-	case "claude-code":
-		name, args = "claude", []string{"-p", prompt, "--model", ref.Model}
-	case "codex":
-		name, args = "codex", []string{"exec", "--model", ref.Model, "--skip-git-repo-check", prompt}
-	case "cursor-agent":
-		name, args = "cursor-agent", []string{"-p", prompt, "--model", ref.Model}
-	case "opencode":
-		name, args = "opencode", []string{"run", "--model", ref.Model, prompt}
-	default:
-		return "", fmt.Errorf("unknown judge agent %q", ref.Agent)
-	}
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
+
+	neutral, err := os.MkdirTemp("", "bench-judge-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(neutral)
+
+	var name string
+	var args []string
+	var lastMsgFile string
+	switch ref.Agent {
+	case "claude-code":
+		// prompt on stdin when -p has no argument
+		name, args = "claude", []string{"-p", "--model", ref.Model, "--setting-sources", "project"}
+	case "codex":
+		// "-" reads the prompt from stdin; clean answer via --output-last-message
+		lastMsgFile = filepath.Join(neutral, "last-message.txt")
+		name, args = "codex", []string{"exec", "--model", ref.Model,
+			"--skip-git-repo-check", "--output-last-message", lastMsgFile, "-"}
+	case "cursor-agent":
+		name, args = "cursor-agent", []string{"-p", prompt, "--model", ref.Model, "--output-format", "text"}
+	case "opencode":
+		name, args = "opencode", []string{"run", "--model", ref.Model, prompt}
+	default:
+		return "", fmt.Errorf("unknown judge agent %q", ref.Agent)
+	}
+
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = neutral
 	cmd.Env = os.Environ()
+	if ref.Agent == "claude-code" || ref.Agent == "codex" {
+		cmd.Stdin = strings.NewReader(prompt)
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return string(out), err
+	}
+	if lastMsgFile != "" {
+		if msg, rerr := os.ReadFile(lastMsgFile); rerr == nil && len(msg) > 0 {
+			return string(msg), nil
+		}
 	}
 	return string(out), nil
 }

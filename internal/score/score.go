@@ -33,11 +33,11 @@ type GateOutcome struct {
 	Passed bool `json:"passed"`
 }
 
-// TestOutcome carries a pass ratio so partial test success scales the factor.
+// TestOutcome is the test gate. Binary for now: bench does not parse
+// per-framework pass counts, so it does not pretend to have a ratio.
 type TestOutcome struct {
-	Ran    bool    `json:"ran"`
-	Ratio  float64 `json:"ratio"` // 0..1, passed/total
-	Passed bool    `json:"passed"`
+	Ran    bool `json:"ran"`
+	Passed bool `json:"passed"`
 }
 
 // GateResult bundles the deterministic checks for one run.
@@ -90,12 +90,8 @@ func GateFactor(g GateResult, w config.GateWeights) float64 {
 	if g.Build.Ran && !g.Build.Passed && w.BuildFailCap < f {
 		f = w.BuildFailCap // build failure caps hard
 	}
-	if g.Test.Ran {
-		if w.TestUseRatio {
-			f *= clamp(g.Test.Ratio, 0, 1)
-		} else if !g.Test.Passed {
-			f *= 0.5
-		}
+	if g.Test.Ran && !g.Test.Passed {
+		f *= w.TestFailFactor
 	}
 	if g.Lint.Ran && !g.Lint.Passed {
 		f -= w.LintPenalty

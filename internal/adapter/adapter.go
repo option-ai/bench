@@ -12,13 +12,23 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"regexp"
 	"time"
 )
 
-// Budget bounds an agent run.
+// Budget bounds an agent run. Timeout covers the WHOLE run (all turns), not
+// each turn individually.
 type Budget struct {
 	Timeout  time.Duration
 	MaxTurns int // 0 = unlimited (advisory; not all agents honor it)
+}
+
+// WithTimeout applies the whole-run budget to a context. Call once per Run.
+func (b Budget) WithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if b.Timeout > 0 {
+		return context.WithTimeout(ctx, b.Timeout)
+	}
+	return ctx, func() {}
 }
 
 // AuthInfo describes how an agent authenticates. Every supported agent uses its
@@ -116,14 +126,9 @@ func onPath(bin string) bool {
 	return err == nil
 }
 
-// run executes a command in dir with a timeout, returning combined output. It
-// is the shared shell-out used by every adapter.
-func run(ctx context.Context, dir string, b Budget, name string, args ...string) ([]byte, error) {
-	if b.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, b.Timeout)
-		defer cancel()
-	}
+// run executes a command in dir, returning combined output. Timeout is the
+// caller's job (Budget.WithTimeout, applied once per whole run).
+func run(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Env = os.Environ()
@@ -133,3 +138,10 @@ func run(ctx context.Context, dir string, b Budget, name string, args ...string)
 	err := cmd.Run()
 	return buf.Bytes(), err
 }
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07`)
+
+// stripANSI removes terminal escape sequences so captured agent output is plain
+// text — both for the judge (no tool-fingerprinting control codes) and for the
+// persisted artifacts.
+func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }

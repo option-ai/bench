@@ -14,7 +14,7 @@ var modelsCmd = &cobra.Command{
 	Long: `Shows every installed agent and the model ids bench will present in ` + "`bench run`" + `,
 after applying any per-agent overrides from config.json ("models" map). Use this
 to confirm a newly-released model shows up; if it doesn't, add it under "models"
-in ` + "`bench config`" + `'s file.`,
+in config.json (path shown below).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {

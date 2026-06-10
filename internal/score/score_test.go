@@ -33,13 +33,12 @@ func TestBuildFailureCapsHard(t *testing.T) {
 	}
 }
 
-func TestTestRatioScales(t *testing.T) {
+func TestTestFailureHalves(t *testing.T) {
 	c := config.Default()
-	c.Gates.TestUseRatio = true
 	sub := Subscores{TaskCompletion: 80, Correctness: 80, FeedbackAdherence: 80, ScopeDiscipline: 80}
 	gates := GateResult{
 		Build: GateOutcome{Ran: true, Passed: true},
-		Test:  TestOutcome{Ran: true, Ratio: 0.5},
+		Test:  TestOutcome{Ran: true, Passed: false},
 	}
 	r := Compute("e", "m", sub, gates, c)
 	if !approx(r.GateFactor, 0.5) {
@@ -55,7 +54,7 @@ func TestCleanRunIsUngated(t *testing.T) {
 	sub := Subscores{TaskCompletion: 100, Correctness: 100, FeedbackAdherence: 100, ScopeDiscipline: 100}
 	gates := GateResult{
 		Build: GateOutcome{Ran: true, Passed: true},
-		Test:  TestOutcome{Ran: true, Ratio: 1.0, Passed: true},
+		Test:  TestOutcome{Ran: true, Passed: true},
 		Lint:  GateOutcome{Ran: true, Passed: true},
 	}
 	r := Compute("e", "m", sub, gates, c)

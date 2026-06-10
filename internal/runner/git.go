@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"time"
 	"os"
 	"os/exec"
 	"strings"
@@ -84,4 +85,19 @@ func scratchWorkspace(ctx context.Context, dir string) error {
 		"-c", "user.email=bench@local", "-c", "user.name=bench",
 		"commit", "--allow-empty", "--quiet", "-m", "bench scratch baseline")
 	return err
+}
+
+// cleanupWorkspace removes a job's working tree once its artifacts are saved.
+// Repo-backed trees are removed via git so the cache repo's worktree registry
+// stays clean; scratch dirs are plain removals. Best-effort with a fresh
+// context: the job's ctx may already be cancelled.
+func cleanupWorkspace(cacheRepo, wt string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if cacheRepo != "" {
+		if _, err := git(ctx, cacheRepo, "worktree", "remove", "--force", wt); err == nil {
+			return
+		}
+	}
+	_ = os.RemoveAll(wt)
 }

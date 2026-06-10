@@ -30,7 +30,14 @@ Parse these from the invocation, e.g. `/add-to-bench title=fix-rdap feedback="..
 
 1. **Collect the user prompts.** Gather every *user* message in the current
    conversation, in order — only genuine user turns, not tool results, system
-   reminders, or your own messages. Preserve their full text verbatim.
+   reminders, or your own messages. Preserve their full text verbatim, with two
+   exclusions:
+   - the `/add-to-bench` invocation itself (it is bookkeeping, not part of the
+     task being benchmarked), and
+   - any other slash-command invocations (`/foo ...`) that are harness
+     commands rather than task content.
+   If a prompt happens to contain the literal line `<!-- prompt -->`, indent it
+   by two spaces inside the captured block so bench's splitter is not confused.
 
 2. **Determine the anchor.** Check whether the working directory is a git repo
    (`git rev-parse --is-inside-work-tree`). 

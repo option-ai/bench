@@ -58,9 +58,8 @@ type GateWeights struct {
 	BuildFailCap float64 `json:"build_fail_cap"`
 	// LintPenalty is subtracted from gate_factor when lint fails.
 	LintPenalty float64 `json:"lint_penalty"`
-	// TestUseRatio, when true, scales gate_factor by the test pass ratio
-	// instead of treating tests as binary.
-	TestUseRatio bool `json:"test_use_ratio"`
+	// TestFailFactor multiplies gate_factor when the test gate fails.
+	TestFailFactor float64 `json:"test_fail_factor"`
 }
 
 // RubricWeights are the relative weights of the judge's sub-scores. They are
@@ -102,9 +101,9 @@ func Default() Config {
 			ScopeDiscipline: 0.10,
 		},
 		Gates: GateWeights{
-			BuildFailCap: 0.30,
-			LintPenalty:  0.10,
-			TestUseRatio: false,
+			BuildFailCap:   0.30,
+			LintPenalty:    0.10,
+			TestFailFactor: 0.50,
 		},
 	}
 }
@@ -133,32 +132,4 @@ func Save(c Config) error {
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
 	return os.WriteFile(configPath(), b, 0o644)
-}
-
-// Auth maps a provider key (e.g. "openai", "anthropic") to an API key.
-type Auth map[string]string
-
-// LoadAuth reads auth.json, returning an empty map if absent.
-func LoadAuth() (Auth, error) {
-	b, err := os.ReadFile(authPath())
-	if os.IsNotExist(err) {
-		return Auth{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var a Auth
-	if err := json.Unmarshal(b, &a); err != nil {
-		return nil, fmt.Errorf("parse auth.json: %w", err)
-	}
-	return a, nil
-}
-
-// SaveAuth writes auth.json with 0600 perms (it holds secrets).
-func SaveAuth(a Auth) error {
-	if err := EnsureDirs(); err != nil {
-		return err
-	}
-	b, _ := json.MarshalIndent(a, "", "  ")
-	return os.WriteFile(authPath(), b, 0o600)
 }

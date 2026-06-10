@@ -24,8 +24,12 @@ var listCmd = &cobra.Command{
 			if !s.IsScratch() {
 				anchor = fmt.Sprintf("%s@%.8s", s.Repo, s.Commit)
 			}
+			replay := string(s.Replay)
+			if replay == "" {
+				replay = "default"
+			}
 			fmt.Printf("• %-28s %-40s (%d prompt(s), replay=%s)\n",
-				s.Title, anchor, len(s.Prompts), s.Replay)
+				s.Title, anchor, len(s.Prompts), replay)
 			if s.Feedback != "" {
 				fmt.Printf("    rubric: %s\n", s.Feedback)
 			}
