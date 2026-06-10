@@ -33,10 +33,10 @@ func LoadRun(path string) (*RunResult, error) {
 	return &r, nil
 }
 
-// saveArtifacts persists a job's diff and the agent's written answer under
+// saveArtifacts persists a job's diff and replay transcript under
 // runDir/jobs/<eval>__<model>/, so results stay inspectable after the working
 // trees are cleaned up. Best-effort: scoring proceeds regardless.
-func saveArtifacts(runDir, eval, model, diff, output string) {
+func saveArtifacts(runDir, eval, model, diff, transcript string) {
 	dir := filepath.Join(runDir, "jobs", snapshot.Slug(eval)+"__"+snapshot.Slug(model))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return
@@ -44,8 +44,8 @@ func saveArtifacts(runDir, eval, model, diff, output string) {
 	if diff != "" {
 		_ = os.WriteFile(filepath.Join(dir, "diff.patch"), []byte(diff), 0o644)
 	}
-	if output != "" {
-		_ = os.WriteFile(filepath.Join(dir, "output.txt"), []byte(output), 0o644)
+	if transcript != "" {
+		_ = os.WriteFile(filepath.Join(dir, "transcript.txt"), []byte(transcript), 0o644)
 	}
 }
 

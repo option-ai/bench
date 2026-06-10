@@ -257,8 +257,8 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 		return fail(StageAgent, fmt.Errorf("agent %q unavailable", m.Agent))
 	}
 	turns := buildTurns(e, o.Cfg)
-	output, err := ag.Run(ctx, wt, turns, m.Model, o.AgentBudget)
-	for attempt := 1; err != nil && attempt <= o.Cfg.RateLimitRetries && looksRateLimited(output, err); attempt++ {
+	responses, err := ag.Run(ctx, wt, turns, m.Model, o.AgentBudget)
+	for attempt := 1; err != nil && attempt <= o.Cfg.RateLimitRetries && looksRateLimited(strings.Join(responses, "\n"), err); attempt++ {
 		emit(o.Events, Event{e.Title, m.Ref(), StageRetry, nil})
 		if !sleepCtx(ctx, backoff(attempt)) {
 			break // run cancelled while waiting
@@ -266,10 +266,10 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 		if rerr := resetWorkspace(ctx, e, wt); rerr != nil {
 			break // can't get a clean tree; surface the original error
 		}
-		output, err = ag.Run(ctx, wt, turns, m.Model, o.AgentBudget)
+		responses, err = ag.Run(ctx, wt, turns, m.Model, o.AgentBudget)
 	}
 	if err != nil {
-		if looksRateLimited(output, err) {
+		if looksRateLimited(strings.Join(responses, "\n"), err) {
 			return fail(StageAgent, fmt.Errorf("rate-limited (retries exhausted): %w", err))
 		}
 		return fail(StageAgent, err)
@@ -281,7 +281,7 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 	if err != nil {
 		return fail(StageAgent, err)
 	}
-	saveArtifacts(runDir, e.Title, m.Ref(), diff, output)
+	saveArtifacts(runDir, e.Title, m.Ref(), diff, renderTranscript(turns, responses))
 
 	// 4. deterministic gates.
 	emit(o.Events, Event{e.Title, m.Ref(), StageGates, nil})
@@ -290,7 +290,8 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 	// 5. blind judge.
 	emit(o.Events, Event{e.Title, m.Ref(), StageJudge, nil})
 	sub, rationale, err := judge.Judge(ctx, o.Judge, judge.Input{
-		Task: e.Prompts, Feedback: e.Feedback, Diff: diff, Output: output,
+		Task: turns, Responses: responses, Feedback: e.Feedback,
+		Diff: diff, Expects: e.Expects,
 	}, o.Cfg.JudgeSamples, o.JudgeTO)
 	if err != nil {
 		return fail(StageJudge, err)
@@ -309,6 +310,11 @@ func buildTurns(e *snapshot.Snapshot, cfg config.Config) []string {
 	mode := e.Replay
 	if mode == "" {
 		mode = cfg.DefaultReplay
+	}
+	// Conversation evals are about per-turn behavior; collapsing the turns
+	// would destroy the very thing being judged.
+	if e.Expects == "conversation" {
+		mode = config.ReplaySequential
 	}
 	if mode == config.ReplaySequential {
 		return e.Prompts
@@ -350,4 +356,17 @@ func shellOK(ctx context.Context, dir, command string, timeout time.Duration) bo
 	cmd.Dir = dir
 	cmd.Env = os.Environ()
 	return cmd.Run() == nil
+}
+
+// renderTranscript interleaves recorded turns with the agent's responses for
+// the persisted artifact.
+func renderTranscript(turns, responses []string) string {
+	var b strings.Builder
+	for i, t := range turns {
+		fmt.Fprintf(&b, "[user %d]\n%s\n\n", i+1, t)
+		if i < len(responses) {
+			fmt.Fprintf(&b, "[agent %d]\n%s\n\n", i+1, responses[i])
+		}
+	}
+	return b.String()
 }

@@ -109,6 +109,11 @@ prose, honor that.
      how bench splits prompts, so include it before every prompt.
    - `replay: oneshot` is the default (all prompts collapsed into one). Use
      `replay: sequential` only if the user asks to preserve turn-by-turn replay.
+   - Optionally add `expects: diff | answer | conversation` when the deliverable
+     is clear: `answer` if the task is a question (file edits would be off-task),
+     `conversation` if the feedback is about behavior across turns (e.g. "should
+     have told me I was wrong early" — this forces sequential replay), `diff`
+     for pure code changes. Omit it otherwise; the judge infers.
 
 4. **Confirm** to the user: print the path written, the title, the anchor
    (repo@commit, or "scratch"), the number of prompts, and any detected gates.

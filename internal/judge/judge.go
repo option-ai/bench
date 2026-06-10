@@ -30,10 +30,11 @@ const maxOutputBytes = 40_000
 
 // Input is everything the judge is allowed to see.
 type Input struct {
-	Task     []string // the user prompts (the task)
-	Feedback string   // optional rubric note from the snapshot
-	Diff     string   // unified diff the agent produced (may be empty)
-	Output   string   // the agent's final written answer (for text-answer evals)
+	Task      []string // the recorded user prompts, in replay order
+	Responses []string // the agent's response to each turn (len 1 for oneshot)
+	Feedback  string   // optional rubric note from the snapshot
+	Diff      string   // unified diff the agent produced (may be empty)
+	Expects   string   // declared deliverable: diff|answer|conversation|"" (auto)
 }
 
 type rawScore struct {
@@ -95,11 +96,26 @@ func truncate(s string, limit int) string {
 func buildPrompt(in Input) string {
 	var b strings.Builder
 	b.WriteString(`You are a strict, impartial judge in an LLM benchmark.
-You are shown a TASK and the WORK an agent produced to accomplish it. The work
-may be a code diff, a set of newly-created files, a written answer, or a mix.
-You do NOT know which model or tool produced it. Judge only what you see.
+You are shown a recorded CONVERSATION (pre-scripted user turns, with the
+candidate agent's actual responses) and the DIFF of any file changes it made.
+You do NOT know which model or tool produced this. Judge only what you see.
 
-Score four dimensions from 0 to 100:
+The user turns were pre-recorded: they do not react to the agent's responses.
+Do not penalize conversational incoherence caused by the script; judge what
+the agent did with the information it had at each turn.
+
+`)
+	switch in.Expects {
+	case "diff":
+		b.WriteString("EXPECTED DELIVERABLE: a code change. Judge the diff; responses are commentary. No meaningful diff means task_completion near 0.\n\n")
+	case "answer":
+		b.WriteString("EXPECTED DELIVERABLE: a written answer. Judge the final response's content. Unrequested file changes count against scope_discipline.\n\n")
+	case "conversation":
+		b.WriteString("EXPECTED DELIVERABLE: conversational behavior across the whole exchange — e.g. whether the agent raised problems at the right moment, pushed back on wrong premises, asked the right questions. Judge the transcript turn by turn against the feedback note.\n\n")
+	default:
+		b.WriteString("EXPECTED DELIVERABLE: infer it from the task — a question expects an answer, an instruction to change code expects a diff — and judge accordingly.\n\n")
+	}
+	b.WriteString(`Score four dimensions from 0 to 100:
 - task_completion: did the work actually accomplish what the task asked?
 - correctness: is it correct, sound, and free of bugs or errors?
 - feedback_adherence: does it satisfy the reviewer's feedback note? If no note is given, score this 100.
@@ -108,29 +124,33 @@ Score four dimensions from 0 to 100:
 Respond with ONLY a JSON object, no prose around it:
 {"task_completion":<n>,"correctness":<n>,"feedback_adherence":<n>,"scope_discipline":<n>,"rationale":"<one paragraph>"}
 
-== TASK ==
+== REVIEWER FEEDBACK NOTE ==
 `)
-	for i, t := range in.Task {
-		fmt.Fprintf(&b, "%d. %s\n", i+1, t)
-	}
-	b.WriteString("\n== REVIEWER FEEDBACK NOTE ==\n")
 	if strings.TrimSpace(in.Feedback) == "" {
 		b.WriteString("(none provided — score feedback_adherence 100)\n")
 	} else {
 		b.WriteString(in.Feedback + "\n")
 	}
-	hasDiff := strings.TrimSpace(in.Diff) != ""
-	hasOut := strings.TrimSpace(in.Output) != ""
-	if hasDiff {
-		b.WriteString("\n== DIFF (files changed/created) ==\n")
+	b.WriteString("\n== CONVERSATION ==\n")
+	perTurn := maxOutputBytes
+	if len(in.Responses) > 1 {
+		perTurn = maxOutputBytes / len(in.Responses)
+	}
+	for i, t := range in.Task {
+		fmt.Fprintf(&b, "[user %d]\n%s\n\n", i+1, t)
+		if i < len(in.Responses) {
+			resp := strings.TrimSpace(in.Responses[i])
+			if resp == "" {
+				resp = "(no response captured)"
+			}
+			fmt.Fprintf(&b, "[agent %d]\n%s\n\n", i+1, truncate(resp, perTurn))
+		}
+	}
+	if strings.TrimSpace(in.Diff) != "" {
+		b.WriteString("== DIFF (files changed/created) ==\n")
 		b.WriteString(truncate(in.Diff, maxDiffBytes) + "\n")
-	}
-	if hasOut {
-		b.WriteString("\n== AGENT WRITTEN ANSWER ==\n")
-		b.WriteString(truncate(in.Output, maxOutputBytes) + "\n")
-	}
-	if !hasDiff && !hasOut {
-		b.WriteString("\n== AGENT WORK ==\n(the agent produced no file changes and no answer)\n")
+	} else {
+		b.WriteString("== DIFF ==\n(no file changes)\n")
 	}
 	return b.String()
 }

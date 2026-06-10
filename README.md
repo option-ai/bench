@@ -86,6 +86,22 @@ Per-eval `replay:` in the snapshot wins; evals without one use `default_replay`
 from config; absent both, oneshot. The `--timeout` flag bounds each agent job's
 whole run (all turns).
 
+## Deliverables (`expects`)
+
+Every job captures the full replay transcript (each recorded user turn + the
+agent's response; oneshot is the 1-turn case) plus the diff. An optional
+per-eval `expects:` tells the judge what to grade:
+
+- `diff` — judge the code change; responses are commentary.
+- `answer` — judge the final response; unrequested file edits hurt scope.
+- `conversation` — judge behavior across turns (did it push back at the right
+  moment, ask the right questions). Forces sequential replay; all four agents
+  resume their session between turns.
+- absent — the judge infers the deliverable from the task.
+
+User turns are pre-recorded, so the judge is told not to penalize the script
+not reacting to the agent; conversation evals test moments, not trajectories.
+
 ## Layout
 
 ```

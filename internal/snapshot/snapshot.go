@@ -32,7 +32,11 @@ type meta struct {
 	Created  string            `yaml:"created"`
 	Feedback string            `yaml:"feedback,omitempty"`
 	Replay   config.ReplayMode `yaml:"replay,omitempty"`
-	Gates    Gates             `yaml:"gates,omitempty"`
+	// Expects declares the deliverable the judge should grade:
+	// "diff", "answer", "conversation", or "" (auto — judge infers from the
+	// task). "conversation" implies sequential replay.
+	Expects string `yaml:"expects,omitempty"`
+	Gates   Gates  `yaml:"gates,omitempty"`
 }
 
 // Snapshot is a parsed eval. Path is set on load and not serialized.

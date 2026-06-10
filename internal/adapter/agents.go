@@ -36,7 +36,7 @@ func (claudeCode) Auth() AuthInfo {
 	return AuthInfo{Note: "Uses your Claude Code login/subscription. Log in by running `claude` and using /login (or `claude setup-token`)."}
 }
 
-func (c *claudeCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+func (c *claudeCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) ([]string, error) {
 	ctx, cancel := b.WithTimeout(ctx)
 	defer cancel()
 	// First turn starts a fresh session; later turns resume it so sequential
@@ -44,19 +44,19 @@ func (c *claudeCode) Run(ctx context.Context, dir string, turns []string, model 
 	// --setting-sources project: the user's personal global CLAUDE.md must not
 	// leak into a benchmark run (it varies per user and can redirect the agent,
 	// e.g. a global worktree policy). The repo's own CLAUDE.md still loads.
-	var last string
+	var rs []string
 	for i, t := range turns {
 		args := []string{"-p", t, "--model", model, "--dangerously-skip-permissions", "--setting-sources", "project"}
 		if i > 0 {
 			args = append(args, "--continue")
 		}
 		out, err := run(ctx, dir, "claude", args...)
-		last = stripANSI(string(out))
+		rs = append(rs, strings.TrimSpace(stripANSI(string(out))))
 		if err != nil {
-			return last, err
+			return rs, err
 		}
 	}
-	return strings.TrimSpace(last), nil
+	return rs, nil
 }
 
 // ---- Codex CLI -------------------------------------------------------------
@@ -75,27 +75,34 @@ func (codex) Auth() AuthInfo {
 	return AuthInfo{LoginCmd: "codex login", Note: "Uses your ChatGPT/Codex login — not an API key."}
 }
 
-func (c *codex) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+func (c *codex) Run(ctx context.Context, dir string, turns []string, model string, b Budget) ([]string, error) {
 	ctx, cancel := b.WithTimeout(ctx)
 	defer cancel()
 	// --output-last-message gives the agent's clean final message; codex's
 	// stdout banners (hooks, token counts) would otherwise fingerprint the tool
-	// to the judge.
-	var last string
-	for _, t := range turns {
+	// to the judge. Later turns resume the same session for conversation memory.
+	var rs []string
+	for i, t := range turns {
 		msgFile := filepath.Join(os.TempDir(), "bench-codex-"+randSuffix())
-		_, err := run(ctx, dir, "codex", "exec", "--model", model,
+		args := []string{"exec"}
+		if i > 0 {
+			args = append(args, "resume", "--last")
+		}
+		args = append(args, "--model", model,
 			"--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check",
 			"--output-last-message", msgFile, t)
+		_, err := run(ctx, dir, "codex", args...)
+		var resp string
 		if msg, rerr := os.ReadFile(msgFile); rerr == nil {
-			last = strings.TrimSpace(string(msg))
+			resp = strings.TrimSpace(string(msg))
 			_ = os.Remove(msgFile)
 		}
+		rs = append(rs, resp)
 		if err != nil {
-			return last, err
+			return rs, err
 		}
 	}
-	return last, nil
+	return rs, nil
 }
 
 // codexCachedModels reads the models Codex itself advertises for this account
@@ -144,18 +151,22 @@ func (cursorAgent) Auth() AuthInfo {
 	return AuthInfo{LoginCmd: "cursor-agent login", Note: "Uses your Cursor login."}
 }
 
-func (c *cursorAgent) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+func (c *cursorAgent) Run(ctx context.Context, dir string, turns []string, model string, b Budget) ([]string, error) {
 	ctx, cancel := b.WithTimeout(ctx)
 	defer cancel()
-	var last string
-	for _, t := range turns {
-		out, err := run(ctx, dir, "cursor-agent", "-p", t, "--model", model, "--force", "--output-format", "text")
-		last = strings.TrimSpace(stripANSI(string(out)))
+	var rs []string
+	for i, t := range turns {
+		args := []string{"-p", t, "--model", model, "--force", "--output-format", "text"}
+		if i > 0 {
+			args = append(args, "--resume")
+		}
+		out, err := run(ctx, dir, "cursor-agent", args...)
+		rs = append(rs, strings.TrimSpace(stripANSI(string(out))))
 		if err != nil {
-			return last, err
+			return rs, err
 		}
 	}
-	return last, nil
+	return rs, nil
 }
 
 // ---- opencode --------------------------------------------------------------
@@ -174,18 +185,23 @@ func (openCode) Auth() AuthInfo {
 	return AuthInfo{LoginCmd: "opencode auth login", Note: "Configure providers via opencode's own auth."}
 }
 
-func (c *openCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+func (c *openCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) ([]string, error) {
 	ctx, cancel := b.WithTimeout(ctx)
 	defer cancel()
-	var last string
-	for _, t := range turns {
-		out, err := run(ctx, dir, "opencode", "run", "--model", model, t)
-		last = strings.TrimSpace(stripANSI(string(out)))
+	var rs []string
+	for i, t := range turns {
+		args := []string{"run", "--model", model}
+		if i > 0 {
+			args = append(args, "--continue")
+		}
+		args = append(args, t)
+		out, err := run(ctx, dir, "opencode", args...)
+		rs = append(rs, strings.TrimSpace(stripANSI(string(out))))
 		if err != nil {
-			return last, err
+			return rs, err
 		}
 	}
-	return last, nil
+	return rs, nil
 }
 
 var opencodeOnce struct {
