@@ -13,6 +13,7 @@ bench setup     guided setup: install skill, agent logins, pick default judge
 bench run       pick evals × models, run, score (judge from config or --judge)
 bench run --evals a,b --models claude-code:claude-fable-5   # non-interactive
 bench list      list your evals
+bench results   all-time leaderboard, run history, detail, compare two runs
 bench models    show detected agents + the model ids bench will offer
 bench install   non-interactive: install skill + config only
 ```
@@ -62,6 +63,18 @@ composite = judge_overall × gate_factor
 
 A model's leaderboard number is the mean composite across the evals it ran.
 The config version is stamped into every run so numbers stay comparable.
+`bench results` aggregates every persisted run into an all-time leaderboard,
+shows any past run in full (scores, rationales, artifact paths), and
+`bench results compare <a> <b>` diffs two runs model-by-model.
+
+## Rate limits
+
+The agent CLIs don't expose RPM/TPM quotas, so bench can't query limits — it
+defends instead: at most `per_agent_concurrency` (default 2) concurrent jobs
+per agent CLI, and failures that look like rate-limiting (429, quota,
+overloaded…) get the workspace reset and the job retried with backoff
+(30s/90s/180s, `rate_limit_retries` times). A job that stays rate-limited is
+reported as `rate-limited (retries exhausted)` rather than a silent 0.
 
 ## Replay modes
 

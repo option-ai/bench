@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
-	"regexp"
 	"time"
 )
 

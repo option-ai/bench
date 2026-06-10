@@ -74,13 +74,19 @@ type RubricWeights struct {
 // Config is the persisted, versioned scoring + run configuration. Version is
 // stamped into every run so historical numbers stay comparable.
 type Config struct {
-	Version       int           `json:"version"`
-	DefaultJudge  string        `json:"default_judge"` // e.g. "claude-code:claude-opus-4-8"
-	DefaultReplay ReplayMode    `json:"default_replay"`
-	JudgeSamples  int           `json:"judge_samples"` // best-of-N median; 1 = single
-	Concurrency   int           `json:"concurrency"`
-	Rubric        RubricWeights `json:"rubric"`
-	Gates         GateWeights   `json:"gates"`
+	Version       int        `json:"version"`
+	DefaultJudge  string     `json:"default_judge"` // e.g. "claude-code:claude-opus-4-8"
+	DefaultReplay ReplayMode `json:"default_replay"`
+	JudgeSamples  int        `json:"judge_samples"` // best-of-N median; 1 = single
+	Concurrency   int        `json:"concurrency"`
+	// PerAgentConcurrency caps concurrent jobs per agent CLI, so one provider
+	// is never hammered by the whole pool at once (RPM/TPM pressure).
+	PerAgentConcurrency int `json:"per_agent_concurrency"`
+	// RateLimitRetries is how many times a job is retried (workspace reset,
+	// exponential backoff) when its failure looks like a rate limit / quota.
+	RateLimitRetries int           `json:"rate_limit_retries"`
+	Rubric           RubricWeights `json:"rubric"`
+	Gates            GateWeights   `json:"gates"`
 	// Models optionally overrides an agent's selectable model list, keyed by
 	// agent id (e.g. "claude-code"). Empty/absent => use the agent's built-ins.
 	Models map[string][]string `json:"models,omitempty"`
@@ -89,11 +95,13 @@ type Config struct {
 // Default returns the baseline config used on first run.
 func Default() Config {
 	return Config{
-		Version:       1,
-		DefaultJudge:  "claude-code:claude-opus-4-8",
-		DefaultReplay: ReplayOneShot,
-		JudgeSamples:  1,
-		Concurrency:   3,
+		Version:             1,
+		DefaultJudge:        "claude-code:claude-opus-4-8",
+		DefaultReplay:       ReplayOneShot,
+		JudgeSamples:        1,
+		Concurrency:         3,
+		PerAgentConcurrency: 2,
+		RateLimitRetries:    2,
 		Rubric: RubricWeights{
 			TaskCompletion:  0.40,
 			Correctness:     0.30,

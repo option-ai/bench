@@ -30,6 +30,7 @@ const (
 	StageAgent  Stage = "agent"
 	StageGates  Stage = "gates"
 	StageJudge  Stage = "judge"
+	StageRetry  Stage = "retry"
 	StageDone   Stage = "done"
 	StageError  Stage = "error"
 )
@@ -49,6 +50,8 @@ func (s Stage) Label() string {
 		return "running checks"
 	case StageJudge:
 		return "judging"
+	case StageRetry:
+		return "rate-limited, retrying"
 	case StageDone:
 		return "done"
 	case StageError:
@@ -73,19 +76,19 @@ type Options struct {
 	Cfg         config.Config
 	AgentBudget adapter.Budget
 	JudgeTO     time.Duration
-	Now         time.Time // injected so the package stays deterministic/testable
+	Now         time.Time    // injected so the package stays deterministic/testable
 	Events      chan<- Event // optional; nil to disable progress
 }
 
 // RunResult is the persisted outcome of a whole run.
 type RunResult struct {
-	ID          string         `json:"id"`
-	StartedAt   string         `json:"started_at"`
-	ConfigVer   int            `json:"config_version"`
-	Judge       string         `json:"judge"`
-	Results     []score.Result `json:"results"`
+	ID          string            `json:"id"`
+	StartedAt   string            `json:"started_at"`
+	ConfigVer   int               `json:"config_version"`
+	Judge       string            `json:"judge"`
+	Results     []score.Result    `json:"results"`
 	Leaderboard []score.LeaderRow `json:"leaderboard"`
-	Dir         string         `json:"-"`
+	Dir         string            `json:"-"`
 }
 
 func emit(ch chan<- Event, e Event) {
@@ -165,6 +168,19 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 		conc = 1
 	}
 	sem := make(chan struct{}, conc)
+
+	// Per-agent semaphores keep any single provider from absorbing the whole
+	// pool at once (RPM/TPM pressure shows up as rate-limit failures).
+	perAgent := o.Cfg.PerAgentConcurrency
+	if perAgent < 1 {
+		perAgent = 1
+	}
+	agentSems := map[string]chan struct{}{}
+	for _, m := range o.Models {
+		if _, ok := agentSems[m.Agent]; !ok {
+			agentSems[m.Agent] = make(chan struct{}, perAgent)
+		}
+	}
 	results := make([]score.Result, len(jobs))
 	var wg sync.WaitGroup
 
@@ -174,6 +190,9 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			as := agentSems[j.model.Agent]
+			as <- struct{}{}
+			defer func() { <-as }()
 			results[i] = runJob(ctx, o, j.eval, j.model, work, runDir, cloneRepo, lockFor)
 		}(i, j)
 	}
@@ -239,7 +258,20 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 	}
 	turns := buildTurns(e, o.Cfg)
 	output, err := ag.Run(ctx, wt, turns, m.Model, o.AgentBudget)
+	for attempt := 1; err != nil && attempt <= o.Cfg.RateLimitRetries && looksRateLimited(output, err); attempt++ {
+		emit(o.Events, Event{e.Title, m.Ref(), StageRetry, nil})
+		if !sleepCtx(ctx, backoff(attempt)) {
+			break // run cancelled while waiting
+		}
+		if rerr := resetWorkspace(ctx, e, wt); rerr != nil {
+			break // can't get a clean tree; surface the original error
+		}
+		output, err = ag.Run(ctx, wt, turns, m.Model, o.AgentBudget)
+	}
 	if err != nil {
+		if looksRateLimited(output, err) {
+			return fail(StageAgent, fmt.Errorf("rate-limited (retries exhausted): %w", err))
+		}
 		return fail(StageAgent, err)
 	}
 

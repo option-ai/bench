@@ -25,6 +25,7 @@ type selectModel struct {
 	cursor   int
 	offset   int // first visible row
 	visible  int // rows shown at once
+	width    int // terminal width; rows are clipped so they never wrap
 	chosen   map[int]bool
 	multi    bool
 	done     bool
@@ -52,6 +53,7 @@ func (m *selectModel) clampWindow() {
 func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.width = msg.Width
 		// leave room for title, indicators, and help text
 		m.visible = msg.Height - 6
 		if m.visible > maxVisible {
@@ -162,7 +164,7 @@ func (m selectModel) View() string {
 		if it.Desc != "" {
 			line += "  " + stDim.Render(it.Desc)
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(clip(line, m.width) + "\n")
 	}
 	if rest := len(m.items) - end; rest > 0 {
 		b.WriteString(stDim.Render(fmt.Sprintf("  ↓ %d more", rest)) + "\n")

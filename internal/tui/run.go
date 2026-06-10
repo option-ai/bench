@@ -8,6 +8,7 @@ import (
 	"github.com/abdul/bench/internal/runner"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type rowKey struct{ eval, model string }
@@ -16,12 +17,13 @@ type eventMsg runner.Event
 type finishedMsg struct{}
 
 type progressModel struct {
-	order  []rowKey
-	stage  map[rowKey]runner.Stage
-	errs   map[rowKey]string
-	wEval  int
-	wModel int
-	events <-chan runner.Event
+	order       []rowKey
+	stage       map[rowKey]runner.Stage
+	errs        map[rowKey]string
+	wEval       int
+	wModel      int
+	width       int // terminal width; rows are clipped to it so they never wrap
+	events      <-chan runner.Event
 	spin        spinner.Model
 	done        bool
 	interrupted bool
@@ -53,6 +55,9 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case finishedMsg:
 		m.done = true
 		return m, tea.Quit
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
@@ -85,8 +90,9 @@ func (m progressModel) View() string {
 		default:
 			status = m.spin.View() + stDim.Render(st.Label())
 		}
-		fmt.Fprintf(&b, "  %s  %s  %s\n",
+		line := fmt.Sprintf("  %s  %s  %s",
 			pad(k.eval, m.wEval), pad(k.model, m.wModel), status)
+		b.WriteString(clip(line, m.width) + "\n")
 	}
 	return b.String()
 }
@@ -115,11 +121,23 @@ func RunProgress(evals, models []string, events <-chan runner.Event) (interrupte
 			m.stage[k] = runner.StageQueued
 		}
 	}
-	out, err := tea.NewProgram(m).Run()
+	// Alt screen: the inline renderer corrupts on terminal resize (wrapped or
+	// stale lines double up); the alt screen repaints fully every frame and
+	// restores the shell content on exit. Final results print after.
+	out, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	if err != nil {
 		return false, err
 	}
 	return out.(progressModel).interrupted, nil
+}
+
+// clip truncates a rendered line to the terminal width, ANSI-aware so styled
+// text is never cut mid-escape.
+func clip(s string, w int) string {
+	if w <= 0 {
+		return s
+	}
+	return ansi.Truncate(s, w, "…")
 }
 
 // RenderResults produces the final leaderboard + per-eval breakdown as aligned,

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/abdul/bench/internal/snapshot"
 	"os"
 	"os/exec"
 	"strings"
@@ -100,4 +102,17 @@ func cleanupWorkspace(cacheRepo, wt string) {
 		}
 	}
 	_ = os.RemoveAll(wt)
+}
+
+// resetWorkspace returns a job's tree to its pristine starting state between
+// rate-limit retries, discarding any partial work from the failed attempt.
+func resetWorkspace(ctx context.Context, e *snapshot.Snapshot, wt string) error {
+	if e.IsScratch() {
+		return scratchWorkspace(ctx, wt)
+	}
+	if _, err := git(ctx, wt, "reset", "--hard"); err != nil {
+		return err
+	}
+	_, err := git(ctx, wt, "clean", "-fd")
+	return err
 }

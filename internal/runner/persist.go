@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 
+	"github.com/abdul/bench/internal/config"
 	"github.com/abdul/bench/internal/snapshot"
 )
 
@@ -46,3 +48,59 @@ func saveArtifacts(runDir, eval, model, diff, output string) {
 		_ = os.WriteFile(filepath.Join(dir, "output.txt"), []byte(output), 0o644)
 	}
 }
+
+// ListRuns loads every persisted run, newest first.
+func ListRuns() ([]*RunResult, error) {
+	entries, err := os.ReadDir(config.RunsDir())
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []*RunResult
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		r, err := LoadRun(filepath.Join(config.RunsDir(), e.Name(), "run.json"))
+		if err != nil {
+			continue // incomplete/cancelled run dirs are skipped, not fatal
+		}
+		r.Dir = filepath.Join(config.RunsDir(), e.Name())
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
+	return out, nil
+}
+
+// FindRun loads one run by ID (or unique ID prefix).
+func FindRun(id string) (*RunResult, error) {
+	runs, err := ListRuns()
+	if err != nil {
+		return nil, err
+	}
+	var match *RunResult
+	for _, r := range runs {
+		if r.ID == id {
+			return r, nil
+		}
+		if len(id) >= 4 && len(r.ID) >= len(id) && r.ID[:len(id)] == id {
+			if match != nil {
+				return nil, errAmbiguous(id)
+			}
+			match = r
+		}
+	}
+	if match == nil {
+		return nil, errNoRun(id)
+	}
+	return match, nil
+}
+
+type runErr string
+
+func (e runErr) Error() string { return string(e) }
+
+func errAmbiguous(id string) error { return runErr("run id prefix \"" + id + "\" is ambiguous") }
+func errNoRun(id string) error     { return runErr("no run matching \"" + id + "\" (see `bench results`)") }
