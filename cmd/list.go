@@ -1,0 +1,31 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/abdul/bench/internal/snapshot"
+	"github.com/spf13/cobra"
+)
+
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List the evals in your bench",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		snaps, err := snapshot.LoadAll()
+		if err != nil {
+			return err
+		}
+		if len(snaps) == 0 {
+			fmt.Println("No evals yet. Capture one with /add-to-bench inside Claude Code.")
+			return nil
+		}
+		for _, s := range snaps {
+			fmt.Printf("• %-28s %s@%.8s  (%d prompt(s), replay=%s)\n",
+				s.Title, s.Repo, s.Commit, len(s.Prompts), s.Replay)
+			if s.Feedback != "" {
+				fmt.Printf("    rubric: %s\n", s.Feedback)
+			}
+		}
+		return nil
+	},
+}
