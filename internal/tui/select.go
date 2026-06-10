@@ -15,10 +15,16 @@ type Item struct {
 	Desc  string
 }
 
+// maxVisible caps the window even on tall terminals: scanning beats scrolling
+// a wall of options.
+const maxVisible = 12
+
 type selectModel struct {
 	title    string
 	items    []Item
 	cursor   int
+	offset   int // first visible row
+	visible  int // rows shown at once
 	chosen   map[int]bool
 	multi    bool
 	done     bool
@@ -27,43 +33,87 @@ type selectModel struct {
 
 func (m selectModel) Init() tea.Cmd { return nil }
 
-func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return m, nil
+// clampWindow keeps the cursor inside the visible window.
+func (m *selectModel) clampWindow() {
+	if m.cursor < m.offset {
+		m.offset = m.cursor
 	}
-	switch key.String() {
-	case "ctrl+c", "q", "esc":
-		m.canceled = true
-		return m, tea.Quit
-	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
+	if m.cursor >= m.offset+m.visible {
+		m.offset = m.cursor - m.visible + 1
+	}
+	if max := len(m.items) - m.visible; m.offset > max {
+		m.offset = max
+	}
+	if m.offset < 0 {
+		m.offset = 0
+	}
+}
+
+func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		// leave room for title, indicators, and help text
+		m.visible = msg.Height - 6
+		if m.visible > maxVisible {
+			m.visible = maxVisible
 		}
-	case "down", "j":
-		if m.cursor < len(m.items)-1 {
-			m.cursor++
+		if m.visible < 3 {
+			m.visible = 3
 		}
-	case " ":
-		if m.multi {
-			m.chosen[m.cursor] = !m.chosen[m.cursor]
-		}
-	case "a":
-		if m.multi {
-			all := len(m.chosen) < len(m.items)
-			for i := range m.items {
-				m.chosen[i] = all
+		m.clampWindow()
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.canceled = true
+			return m, tea.Quit
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
 			}
+		case "down", "j":
+			if m.cursor < len(m.items)-1 {
+				m.cursor++
+			}
+		case "pgup":
+			m.cursor -= m.visible
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+		case "pgdown":
+			m.cursor += m.visible
+			if m.cursor > len(m.items)-1 {
+				m.cursor = len(m.items) - 1
+			}
+		case "home", "g":
+			m.cursor = 0
+		case "end", "G":
+			m.cursor = len(m.items) - 1
+		case " ":
+			if m.multi {
+				m.chosen[m.cursor] = !m.chosen[m.cursor]
+			}
+		case "a":
+			if m.multi {
+				all := len(m.chosen) < len(m.items)
+				for i := range m.items {
+					m.chosen[i] = all
+				}
+				if !all {
+					m.chosen = map[int]bool{}
+				}
+			}
+		case "enter":
+			if !m.multi {
+				m.chosen = map[int]bool{m.cursor: true}
+			}
+			if len(m.chosen) == 0 {
+				return m, nil // require at least one
+			}
+			m.done = true
+			return m, tea.Quit
 		}
-	case "enter":
-		if !m.multi {
-			m.chosen = map[int]bool{m.cursor: true}
-		}
-		if len(m.chosen) == 0 {
-			return m, nil // require at least one
-		}
-		m.done = true
-		return m, tea.Quit
+		m.clampWindow()
 	}
 	return m, nil
 }
@@ -73,8 +123,27 @@ func (m selectModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(stTitle.Render(m.title) + "\n\n")
-	for i, it := range m.items {
+	title := m.title
+	if m.multi {
+		n := 0
+		for _, v := range m.chosen {
+			if v {
+				n++
+			}
+		}
+		title += stDim.Render(fmt.Sprintf("  (%d/%d selected)", n, len(m.items)))
+	}
+	b.WriteString(stTitle.Render(title) + "\n\n")
+
+	end := m.offset + m.visible
+	if end > len(m.items) {
+		end = len(m.items)
+	}
+	if m.offset > 0 {
+		b.WriteString(stDim.Render(fmt.Sprintf("  ↑ %d more", m.offset)) + "\n")
+	}
+	for i := m.offset; i < end; i++ {
+		it := m.items[i]
 		cursor := "  "
 		if i == m.cursor {
 			cursor = stPick.Render("▸ ")
@@ -95,9 +164,13 @@ func (m selectModel) View() string {
 		}
 		b.WriteString(line + "\n")
 	}
-	hint := "↑/↓ move · enter confirm · q cancel"
+	if rest := len(m.items) - end; rest > 0 {
+		b.WriteString(stDim.Render(fmt.Sprintf("  ↓ %d more", rest)) + "\n")
+	}
+
+	hint := "↑/↓ move · pgup/pgdn jump · enter confirm · q cancel"
 	if m.multi {
-		hint = "↑/↓ move · space toggle · a all · enter confirm · q cancel"
+		hint = "↑/↓ move · space toggle · a all · pgup/pgdn jump · enter confirm · q cancel"
 	}
 	b.WriteString(stHelp.Render(hint))
 	return b.String()
@@ -121,7 +194,13 @@ func runSelect(title string, items []Item, multi bool) ([]int, error) {
 	if len(items) == 0 {
 		return nil, fmt.Errorf("nothing to select")
 	}
-	m := selectModel{title: title, items: items, chosen: map[int]bool{}, multi: multi}
+	m := selectModel{
+		title:   title,
+		items:   items,
+		chosen:  map[int]bool{},
+		multi:   multi,
+		visible: maxVisible,
+	}
 	out, err := tea.NewProgram(m).Run()
 	if err != nil {
 		return nil, err
