@@ -1,6 +1,9 @@
 ---
 name: add-to-bench
 description: Capture the current conversation as a bench eval — grabs all user prompts (and, if you're in a git repo, the repo + commit) and writes a snapshot the `bench` CLI can replay against other models. Works with or without a repo, so it's usable from coding sessions and from repo-less environments alike. Use when the user says "add this to my bench", "/add-to-bench", "snapshot this for evals", or wants to turn the current session into a benchmark case.
+argument-hint: "[title] [feedback]"
+arguments: [title, feedback]
+allowed-tools: Read Write Bash(git *) Bash(mkdir *)
 ---
 
 # add-to-bench
@@ -20,11 +23,15 @@ An eval comes in two flavours, chosen automatically:
 
 ## Arguments (both optional)
 
-- `title` — identifier and filename. If omitted, infer a short kebab-case title.
-- `feedback` — a note that becomes the judge's rubric (e.g. "should debounce the
-  DoH lookups, not add a global timeout"). If omitted, leave it empty.
+- **title** = `$title` — identifier and filename. If empty, infer a short
+  kebab-case title from what the session was about.
+- **feedback** = `$feedback` — a note that becomes the judge's rubric (e.g.
+  "should debounce the DoH lookups, not add a global timeout"). If empty, leave
+  the frontmatter line out.
 
-Parse these from the invocation, e.g. `/add-to-bench title=fix-rdap feedback="..."`.
+These come from the slash-command arguments (`/add-to-bench <title> <feedback>`).
+If the user instead wrote them inline as `title=... feedback="..."` or described
+them in prose, honor that.
 
 ## Steps
 
