@@ -20,8 +20,12 @@ var listCmd = &cobra.Command{
 			return nil
 		}
 		for _, s := range snaps {
-			fmt.Printf("• %-28s %s@%.8s  (%d prompt(s), replay=%s)\n",
-				s.Title, s.Repo, s.Commit, len(s.Prompts), s.Replay)
+			anchor := "scratch (no repo)"
+			if !s.IsScratch() {
+				anchor = fmt.Sprintf("%s@%.8s", s.Repo, s.Commit)
+			}
+			fmt.Printf("• %-28s %-40s (%d prompt(s), replay=%s)\n",
+				s.Title, anchor, len(s.Prompts), s.Replay)
 			if s.Feedback != "" {
 				fmt.Printf("    rubric: %s\n", s.Feedback)
 			}

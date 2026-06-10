@@ -17,25 +17,28 @@ func init() {
 
 type claudeCode struct{}
 
-func (claudeCode) ID() string        { return "claude-code" }
-func (claudeCode) Available() bool   { return onPath("claude") }
+func (claudeCode) ID() string      { return "claude-code" }
+func (claudeCode) Available() bool { return onPath("claude") }
 func (claudeCode) Models() []string {
 	return []string{"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"}
 }
 
-func (c *claudeCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) error {
+func (c *claudeCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
 	// First turn starts a fresh session; later turns resume it so sequential
 	// replay keeps conversation memory.
+	var last string
 	for i, t := range turns {
 		args := []string{"-p", t, "--model", model, "--dangerously-skip-permissions"}
 		if i > 0 {
 			args = append(args, "--continue")
 		}
-		if _, err := run(ctx, dir, b, "claude", args...); err != nil {
-			return err
+		out, err := run(ctx, dir, b, "claude", args...)
+		last = string(out)
+		if err != nil {
+			return last, err
 		}
 	}
-	return nil
+	return last, nil
 }
 
 // ---- Codex CLI -------------------------------------------------------------
@@ -48,16 +51,18 @@ func (codex) Models() []string {
 	return []string{"gpt-5-codex", "gpt-5"}
 }
 
-func (c *codex) Run(ctx context.Context, dir string, turns []string, model string, b Budget) error {
+func (c *codex) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
 	// codex exec is non-interactive. It has no cross-call session resume here,
 	// so sequential turns run fresh against the (already-modified) tree.
+	var last string
 	for _, t := range turns {
-		args := []string{"exec", "--model", model, "--full-auto", t}
-		if _, err := run(ctx, dir, b, "codex", args...); err != nil {
-			return err
+		out, err := run(ctx, dir, b, "codex", "exec", "--model", model, "--full-auto", t)
+		last = string(out)
+		if err != nil {
+			return last, err
 		}
 	}
-	return nil
+	return last, nil
 }
 
 // ---- cursor-agent ----------------------------------------------------------
@@ -70,14 +75,16 @@ func (cursorAgent) Models() []string {
 	return []string{"auto", "claude-sonnet-4-6", "gpt-5"}
 }
 
-func (c *cursorAgent) Run(ctx context.Context, dir string, turns []string, model string, b Budget) error {
+func (c *cursorAgent) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+	var last string
 	for _, t := range turns {
-		args := []string{"-p", t, "--model", model, "--force"}
-		if _, err := run(ctx, dir, b, "cursor-agent", args...); err != nil {
-			return err
+		out, err := run(ctx, dir, b, "cursor-agent", "-p", t, "--model", model, "--force")
+		last = string(out)
+		if err != nil {
+			return last, err
 		}
 	}
-	return nil
+	return last, nil
 }
 
 // ---- opencode --------------------------------------------------------------
@@ -90,12 +97,14 @@ func (openCode) Models() []string {
 	return []string{"anthropic/claude-opus-4-8", "openai/gpt-5"}
 }
 
-func (c *openCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) error {
+func (c *openCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
+	var last string
 	for _, t := range turns {
-		args := []string{"run", "--model", model, t}
-		if _, err := run(ctx, dir, b, "opencode", args...); err != nil {
-			return err
+		out, err := run(ctx, dir, b, "opencode", "run", "--model", model, t)
+		last = string(out)
+		if err != nil {
+			return last, err
 		}
 	}
-	return nil
+	return last, nil
 }

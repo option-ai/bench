@@ -30,8 +30,10 @@ type Agent interface {
 	// Models lists the model ids selectable for this agent.
 	Models() []string
 	// Run executes the agent in dir against turns, leaving edits in the working
-	// tree. turns has length 1 for oneshot replay.
-	Run(ctx context.Context, dir string, turns []string, model string, b Budget) error
+	// tree. turns has length 1 for oneshot replay. It returns the agent's final
+	// textual output (the last turn's stdout) so text-answer evals — ones that
+	// produce no file changes — can still be judged.
+	Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error)
 }
 
 var registry []Agent

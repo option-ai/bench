@@ -17,8 +17,15 @@ bench auth set <p> <k>  store a provider API key
 
 ## Concepts
 
-- **eval** — one captured task: prompts + repo + commit + optional feedback
-  rubric. One markdown file under `~/.config/bench/snapshots/`.
+- **eval** — one captured task: prompts + optional feedback rubric, optionally
+  anchored to a repo + commit. One markdown file under
+  `~/.config/bench/snapshots/`. Two flavours:
+  - **repo-backed** — replays the prompts against an exact repo state; the judge
+    scores the diff.
+  - **scratch** — no repo (sessions captured in Claude Desktop, ChatGPT desktop,
+    Cowork, or from-scratch tasks). The agent runs in a fresh empty workspace
+    and the judge scores whatever it produces — created files and/or its written
+    answer.
 - **bench** — the set of evals you select for a run.
 - **judge** — a model that grades a diff *blind*: it sees the task and the
   feedback rubric, never the model identity or the agent's reasoning.
@@ -76,8 +83,9 @@ internal/
 
 ## Status
 
-Working: capture format, scoring engine (tested), agent detection, run
-orchestration (clone/worktree/diff/gates), blind judge, leaderboard, install.
+Working: capture format (repo-backed + scratch), scoring engine (tested), agent
+detection, run orchestration (clone/worktree or scratch workspace, diff, gates),
+blind judge (grades a diff and/or a written answer), leaderboard, install.
 
 Adapter command flags (`codex exec`, `cursor-agent -p`, `opencode run`) and the
 static model lists are best-effort starting points — tune `internal/adapter/agents.go`

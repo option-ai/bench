@@ -27,8 +27,8 @@ type Gates struct {
 // meta is the YAML frontmatter block.
 type meta struct {
 	Title    string            `yaml:"title"`
-	Repo     string            `yaml:"repo"`
-	Commit   string            `yaml:"commit"`
+	Repo     string            `yaml:"repo,omitempty"`   // optional: empty => scratch eval
+	Commit   string            `yaml:"commit,omitempty"` // optional: required only if Repo is set
 	Created  string            `yaml:"created"`
 	Feedback string            `yaml:"feedback,omitempty"`
 	Replay   config.ReplayMode `yaml:"replay,omitempty"`
@@ -161,3 +161,8 @@ func Slug(title string) string {
 	s := slugRe.ReplaceAllString(strings.ToLower(title), "-")
 	return strings.Trim(s, "-")
 }
+
+// IsScratch reports whether this eval has no repo anchor. Scratch evals run in
+// a fresh empty workspace — for sessions captured outside a git repo (Claude
+// Desktop, ChatGPT desktop, Cowork, etc.) or for from-scratch tasks.
+func (s *Snapshot) IsScratch() bool { return strings.TrimSpace(s.Repo) == "" }

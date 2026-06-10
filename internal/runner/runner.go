@@ -158,29 +158,38 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 		return r
 	}
 
-	// 1. clone (cached) + worktree at the eval's commit.
+	// 1. set up the workspace: clone+worktree for repo-backed evals, or a fresh
+	// git-initialised scratch dir for evals captured without a repo.
 	emit(o.Events, Event{e.Title, m.Ref(), StageClone, nil})
-	cache, err := cloneRepo(e.Repo)
-	if err != nil {
-		return fail(StageClone, err)
-	}
 	wt := filepath.Join(work, snapshot.Slug(e.Title)+"__"+snapshot.Slug(m.Ref()))
-	if err := gitWorktreeAdd(ctx, cache, wt, e.Commit); err != nil {
-		return fail(StageClone, err)
+	if e.IsScratch() {
+		if err := scratchWorkspace(ctx, wt); err != nil {
+			return fail(StageClone, err)
+		}
+	} else {
+		cache, err := cloneRepo(e.Repo)
+		if err != nil {
+			return fail(StageClone, err)
+		}
+		if err := gitWorktreeAdd(ctx, cache, wt, e.Commit); err != nil {
+			return fail(StageClone, err)
+		}
 	}
 
-	// 2. drive the agent. Collapse prompts for oneshot replay.
+	// 2. drive the agent. Collapse prompts for oneshot replay. Capture its final
+	// written output so text-answer evals are gradable even with no file changes.
 	emit(o.Events, Event{e.Title, m.Ref(), StageAgent, nil})
 	ag := adapter.Get(m.Agent)
 	if ag == nil || !ag.Available() {
 		return fail(StageAgent, fmt.Errorf("agent %q unavailable", m.Agent))
 	}
 	turns := buildTurns(e)
-	if err := ag.Run(ctx, wt, turns, m.Model, o.AgentBudget); err != nil {
+	output, err := ag.Run(ctx, wt, turns, m.Model, o.AgentBudget)
+	if err != nil {
 		return fail(StageAgent, err)
 	}
 
-	// 3. capture the diff (including new files).
+	// 3. capture the diff (including new files; empty for pure text answers).
 	diff, err := gitCaptureDiff(ctx, wt)
 	if err != nil {
 		return fail(StageAgent, err)
@@ -193,7 +202,7 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 	// 5. blind judge.
 	emit(o.Events, Event{e.Title, m.Ref(), StageJudge, nil})
 	sub, rationale, err := judge.Judge(ctx, o.Judge, judge.Input{
-		Task: e.Prompts, Feedback: e.Feedback, Diff: diff,
+		Task: e.Prompts, Feedback: e.Feedback, Diff: diff, Output: output,
 	}, o.Cfg.JudgeSamples, o.JudgeTO)
 	if err != nil {
 		return fail(StageJudge, err)

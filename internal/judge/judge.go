@@ -22,7 +22,8 @@ import (
 type Input struct {
 	Task     []string // the user prompts (the task)
 	Feedback string   // optional rubric note from the snapshot
-	Diff     string   // unified diff the agent produced
+	Diff     string   // unified diff the agent produced (may be empty)
+	Output   string   // the agent's final written answer (for text-answer evals)
 }
 
 type rawScore struct {
@@ -70,13 +71,14 @@ func Judge(ctx context.Context, ref adapter.ModelRef, in Input, samples int, tim
 
 func buildPrompt(in Input) string {
 	var b strings.Builder
-	b.WriteString(`You are a strict, impartial code-review judge in an LLM benchmark.
-You are shown a TASK and a DIFF that some agent produced to accomplish it.
-You do NOT know which model or tool produced the diff. Judge only what you see.
+	b.WriteString(`You are a strict, impartial judge in an LLM benchmark.
+You are shown a TASK and the WORK an agent produced to accomplish it. The work
+may be a code diff, a set of newly-created files, a written answer, or a mix.
+You do NOT know which model or tool produced it. Judge only what you see.
 
 Score four dimensions from 0 to 100:
-- task_completion: did the diff actually accomplish what the task asked?
-- correctness: is the code correct, idiomatic, and free of bugs?
+- task_completion: did the work actually accomplish what the task asked?
+- correctness: is it correct, sound, and free of bugs or errors?
 - feedback_adherence: does it satisfy the reviewer's feedback note? If no note is given, score this 100.
 - scope_discipline: did it stay on-task without unrelated or destructive changes?
 
@@ -94,11 +96,18 @@ Respond with ONLY a JSON object, no prose around it:
 	} else {
 		b.WriteString(in.Feedback + "\n")
 	}
-	b.WriteString("\n== DIFF ==\n")
-	if strings.TrimSpace(in.Diff) == "" {
-		b.WriteString("(empty diff — the agent changed nothing)\n")
-	} else {
+	hasDiff := strings.TrimSpace(in.Diff) != ""
+	hasOut := strings.TrimSpace(in.Output) != ""
+	if hasDiff {
+		b.WriteString("\n== DIFF (files changed/created) ==\n")
 		b.WriteString(in.Diff + "\n")
+	}
+	if hasOut {
+		b.WriteString("\n== AGENT WRITTEN ANSWER ==\n")
+		b.WriteString(in.Output + "\n")
+	}
+	if !hasDiff && !hasOut {
+		b.WriteString("\n== AGENT WORK ==\n(the agent produced no file changes and no answer)\n")
 	}
 	return b.String()
 }

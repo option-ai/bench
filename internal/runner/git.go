@@ -65,3 +65,23 @@ func gitCaptureDiff(ctx context.Context, wt string) (string, error) {
 	}
 	return string(out), nil
 }
+
+// scratchWorkspace creates a fresh, empty git repo for a scratch (repo-less)
+// eval, with an empty initial commit so a later `diff --cached` shows every
+// file the agent creates. Identity is set inline so the commit needs no global
+// git config.
+func scratchWorkspace(ctx context.Context, dir string) error {
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if _, err := git(ctx, dir, "init", "--quiet"); err != nil {
+		return err
+	}
+	_, err := git(ctx, dir,
+		"-c", "user.email=bench@local", "-c", "user.name=bench",
+		"commit", "--allow-empty", "--quiet", "-m", "bench scratch baseline")
+	return err
+}
