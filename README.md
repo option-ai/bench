@@ -8,11 +8,11 @@ agent on that exact repo state, and a **blind judge** scores each diff into a
 single composite number so you can compare models head-to-head.
 
 ```
-/add-to-bench           capture the current session as an eval   (Claude Code skill)
-bench run               pick evals × models × judge, run, score
-bench list              list your evals
-bench install           install the skill globally + set up config
-bench auth set <p> <k>  store a provider API key
+/add-to-bench   capture the current session as an eval   (Claude Code skill)
+bench setup     guided setup: install skill, agent logins, pick judge
+bench run       pick evals × models × judge, run, score
+bench list      list your evals
+bench install   non-interactive: install skill + config only
 ```
 
 ## Concepts
@@ -29,6 +29,18 @@ bench auth set <p> <k>  store a provider API key
 - **bench** — the set of evals you select for a run.
 - **judge** — a model that grades a diff *blind*: it sees the task and the
   feedback rubric, never the model identity or the agent's reasoning.
+
+## Auth
+
+Every supported agent authenticates with **its own login** — bench stores no API
+keys. `bench setup` walks you through it and can launch each login inline:
+
+| agent        | login                                         |
+|--------------|-----------------------------------------------|
+| claude-code  | run `claude`, then `/login` (or `claude setup-token`) |
+| codex        | `codex login` (your ChatGPT/Codex login, not an API key) |
+| cursor-agent | `cursor-agent login`                          |
+| opencode     | `opencode auth login`                         |
 
 ## Scoring (the single number)
 

@@ -27,5 +27,5 @@ func Execute() {
 }
 
 func init() {
-	root.AddCommand(listCmd, runCmd, authCmd, installCmd)
+	root.AddCommand(setupCmd, listCmd, runCmd, authCmd, installCmd)
 }

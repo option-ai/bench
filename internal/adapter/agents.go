@@ -22,6 +22,9 @@ func (claudeCode) Available() bool { return onPath("claude") }
 func (claudeCode) Models() []string {
 	return []string{"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"}
 }
+func (claudeCode) Auth() AuthInfo {
+	return AuthInfo{Note: "Uses your Claude Code login/subscription. Log in by running `claude` and using /login (or `claude setup-token`)."}
+}
 
 func (c *claudeCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
 	// First turn starts a fresh session; later turns resume it so sequential
@@ -50,6 +53,9 @@ func (codex) Available() bool { return onPath("codex") }
 func (codex) Models() []string {
 	return []string{"gpt-5-codex", "gpt-5"}
 }
+func (codex) Auth() AuthInfo {
+	return AuthInfo{LoginCmd: "codex login", Note: "Uses your ChatGPT/Codex login — not an API key."}
+}
 
 func (c *codex) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
 	// codex exec is non-interactive. It has no cross-call session resume here,
@@ -74,6 +80,9 @@ func (cursorAgent) Available() bool { return onPath("cursor-agent") }
 func (cursorAgent) Models() []string {
 	return []string{"auto", "claude-sonnet-4-6", "gpt-5"}
 }
+func (cursorAgent) Auth() AuthInfo {
+	return AuthInfo{LoginCmd: "cursor-agent login", Note: "Uses your Cursor login."}
+}
 
 func (c *cursorAgent) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {
 	var last string
@@ -95,6 +104,9 @@ func (openCode) ID() string      { return "opencode" }
 func (openCode) Available() bool { return onPath("opencode") }
 func (openCode) Models() []string {
 	return []string{"anthropic/claude-opus-4-8", "openai/gpt-5"}
+}
+func (openCode) Auth() AuthInfo {
+	return AuthInfo{LoginCmd: "opencode auth login", Note: "Configure providers via opencode's own auth."}
 }
 
 func (c *openCode) Run(ctx context.Context, dir string, turns []string, model string, b Budget) (string, error) {

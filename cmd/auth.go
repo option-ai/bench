@@ -10,7 +10,10 @@ import (
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
-	Short: "Configure provider API keys for the agents you want to test",
+	Short: "Manage optional provider API keys",
+	Long: `The supported agents (claude, codex, cursor-agent, opencode) each use their
+own login — run ` + "`bench setup`" + ` to log in. This command only stores API keys
+for any direct-API providers you wire up yourself.`,
 }
 
 var authSetCmd = &cobra.Command{
@@ -40,7 +43,7 @@ var authListCmd = &cobra.Command{
 			return err
 		}
 		if len(a) == 0 {
-			fmt.Println("No keys configured. Note: Claude Code uses its own login, not bench auth.")
+			fmt.Println("No keys configured. claude/codex/cursor-agent/opencode each use their own login — run `bench setup`.")
 			return nil
 		}
 		var keys []string

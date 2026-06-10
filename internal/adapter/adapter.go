@@ -21,12 +21,24 @@ type Budget struct {
 	MaxTurns int // 0 = unlimited (advisory; not all agents honor it)
 }
 
+// AuthInfo describes how an agent authenticates. Every supported agent uses its
+// own login (its own CLI / subscription), not a bench-managed API key.
+type AuthInfo struct {
+	// LoginCmd is an executable command that logs the user in, e.g.
+	// "codex login". Empty when login is interactive inside the tool itself.
+	LoginCmd string
+	// Note is a one-line human explanation shown during setup.
+	Note string
+}
+
 // Agent is a coding CLI bench can drive headlessly.
 type Agent interface {
 	// ID is the stable adapter id, e.g. "claude-code".
 	ID() string
 	// Available reports whether the binary is installed and usable.
 	Available() bool
+	// Auth describes how this agent authenticates (its own login).
+	Auth() AuthInfo
 	// Models lists the model ids selectable for this agent.
 	Models() []string
 	// Run executes the agent in dir against turns, leaving edits in the working
