@@ -19,9 +19,10 @@ func RenderRunList(runs []*runner.RunResult) string {
 		wid = max(wid, utf8.RuneCountInString(r.ID))
 	}
 	for _, r := range runs {
-		winner := "—"
+		winner := stDim.Render("—")
 		if len(r.Leaderboard) > 0 {
-			winner = fmt.Sprintf("%s %.1f", r.Leaderboard[0].Model, r.Leaderboard[0].Score)
+			winner = stStar.Render("★ ") + r.Leaderboard[0].Model + " " +
+				scoreStyle(r.Leaderboard[0].Score).Bold(true).Render(fmt.Sprintf("%.1f", r.Leaderboard[0].Score))
 		}
 		nEvals := map[string]bool{}
 		for _, res := range r.Results {
@@ -30,7 +31,7 @@ func RenderRunList(runs []*runner.RunResult) string {
 		fmt.Fprintf(&b, "  %s  %s   %s\n",
 			pad(r.ID, wid),
 			stDim.Render(fmt.Sprintf("%d eval(s) × %d result(s) · judge %s", len(nEvals), len(r.Results), r.Judge)),
-			stGood.Render(winner))
+			winner)
 	}
 	b.WriteString(stHelp.Render("bench results <id> for detail · bench results compare <a> <b>"))
 	return b.String()
@@ -75,16 +76,14 @@ func RenderAllTime(runs []*runner.RunResult) string {
 	})
 
 	var b strings.Builder
-	b.WriteString(stTitle.Render("All-time leaderboard") + "\n")
+	b.WriteString(stTitle.Render("All-time leaderboard") + "\n\n")
 	wm := 5
 	for _, r := range rows {
 		wm = max(wm, utf8.RuneCountInString(r.model))
 	}
 	for i, r := range rows {
-		fmt.Fprintf(&b, "  %d. %s   %s  %s\n",
-			i+1, pad(r.model, wm),
-			stGood.Render(fmt.Sprintf("%5.1f", r.score)),
-			stDim.Render(fmt.Sprintf("(%d job(s) over %d run(s))", r.n, r.runs)))
+		b.WriteString(leaderRow(i, r.model, wm, r.score,
+			fmt.Sprintf("(%d job(s) over %d run(s))", r.n, r.runs)) + "\n")
 	}
 	if len(rows) == 0 {
 		b.WriteString(stDim.Render("  no completed runs yet") + "\n")
