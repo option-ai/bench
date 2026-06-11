@@ -6,8 +6,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/abdul/bench/internal/runner"
+	"github.com/abdul/bench/internal/score"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -145,38 +147,74 @@ func clip(s string, w int) string {
 func RenderResults(res *runner.RunResult) string {
 	var b strings.Builder
 
-	b.WriteString("\n" + stTitle.Render("Leaderboard") + "\n")
+	b.WriteString("\n" + stTitle.Render("Leaderboard") + "\n\n")
 	mw := 5
 	for _, row := range res.Leaderboard {
 		mw = max(mw, utf8.RuneCountInString(row.Model))
 	}
 	for i, row := range res.Leaderboard {
-		fmt.Fprintf(&b, "  %d. %s   %s  %s\n",
-			i+1, pad(row.Model, mw),
-			stGood.Render(fmt.Sprintf("%5.1f", row.Score)),
-			stDim.Render(fmt.Sprintf("(%d run%s)", row.Runs, plural(row.Runs))))
+		b.WriteString(leaderRow(i, row.Model, mw, row.Score,
+			fmt.Sprintf("(%d run%s)", row.Runs, plural(row.Runs))) + "\n")
 	}
 
-	b.WriteString("\n" + stTitle.Render("Per-eval breakdown") + "\n")
+	b.WriteString("\n" + stTitle.Render("Per-eval breakdown") + "\n\n")
 	ew, mw2 := 4, 5
 	for _, r := range res.Results {
 		ew = max(ew, utf8.RuneCountInString(r.Eval))
 		mw2 = max(mw2, utf8.RuneCountInString(r.Model))
 	}
 	for _, r := range res.Results {
-		var scoreCell string
-		if r.Err != "" {
-			scoreCell = stErr.Render(pad("ERR", 5))
-		} else {
-			scoreCell = stGood.Render(fmt.Sprintf("%5.1f", r.Composite))
-		}
-		detail := stDim.Render(fmt.Sprintf("judge %.0f · gate %.2f", r.JudgeOverall, r.GateFactor))
-		fmt.Fprintf(&b, "  %s  %s  %s   %s\n", pad(r.Eval, ew), pad(r.Model, mw2), scoreCell, detail)
-		if r.Err != "" {
-			fmt.Fprintf(&b, "  %s  %s\n", strings.Repeat(" ", ew+mw2+2), stDim.Render(r.Err))
-		}
+		fmt.Fprintf(&b, "  %s  %s  %s\n",
+			pad(r.Eval, ew), stDim.Render(pad(r.Model, mw2)), evalOutcome(r))
 	}
+
+	b.WriteString("\n" + chips("judge "+res.Judge, fmt.Sprintf("config v%d", res.ConfigVer)) + "\n")
 	return b.String()
+}
+
+// leaderRow renders one leaderboard line: dim rank, ★ on the winner, model
+// name, graded score, dim run count. The winner row gets a subtle tint —
+// applied per segment, since each inner color reset would clear a
+// whole-line background.
+func leaderRow(i int, model string, mw int, score float64, note string) string {
+	bg := lipgloss.NewStyle()
+	star := " "
+	if i == 0 {
+		bg = stWinRow
+		star = stStar.Inherit(stWinRow).Render("★")
+	}
+	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s",
+		bg.Render("  "),
+		stDim.Inherit(bg).Render(fmt.Sprintf("%d.", i+1)),
+		bg.Render(" "), star, bg.Render(" "),
+		bg.Render(pad(model, mw)+"   "),
+		scoreStyle(score).Bold(true).Inherit(bg).Render(fmt.Sprintf("%5.1f", score)),
+		bg.Render("  "),
+		stDim.Inherit(bg).Render(note),
+		bg.Render(" "))
+}
+
+// evalOutcome renders the right-hand cell of a per-eval row:
+// ✓ 91.2 · judge 92 · gate 1.00 in green, or the failure in red.
+func evalOutcome(r score.Result) string {
+	if r.Err != "" {
+		msg := r.Err
+		if len(msg) > 48 {
+			msg = msg[:48] + "…"
+		}
+		return stErr.Render(fmt.Sprintf("✗ %s — gate capped at %.2f", msg, r.GateFactor))
+	}
+	gate := stGood.Render(fmt.Sprintf("gate %.2f", r.GateFactor))
+	if r.GateFactor < 1 {
+		gate = stWarn.Render(fmt.Sprintf("gate %.2f", r.GateFactor))
+	}
+	return fmt.Sprintf("%s %s %s %s %s %s",
+		stGood.Render("✓"),
+		scoreStyle(r.Composite).Bold(true).Render(fmt.Sprintf("%.1f", r.Composite)),
+		stDim.Render("·"),
+		stGood.Render(fmt.Sprintf("judge %.0f", r.JudgeOverall)),
+		stDim.Render("·"),
+		gate)
 }
 
 // pad right-pads s to n visible runes.
