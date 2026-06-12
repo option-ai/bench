@@ -53,6 +53,8 @@ title in prose (e.g. "call it X"), honor that instead.
      - `git remote get-url origin` → normalize to `github.com/owner/name`
        (strip protocol, trailing `.git`).
      - `git rev-parse HEAD` → the commit.
+     - `git rev-parse --show-toplevel` → `source_path` (the absolute repo root
+       on this machine — benchy's clone fallback when the remote is private).
      - If the tree is dirty, warn that uncommitted changes won't be captured
        (benchy checks out the commit cleanly).
      - Detect gate commands and fill what you find (leave unknown ones empty):
@@ -71,6 +73,7 @@ title in prose (e.g. "call it X"), honor that instead.
    title: <title>
    repo: github.com/owner/name
    commit: <full-sha>
+   source_path: /absolute/path/to/repo
    created: <YYYY-MM-DD>
    feedback: <feedback or omit the line if none>
    replay: oneshot

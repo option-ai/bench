@@ -47,18 +47,38 @@ var setupCmd = &cobra.Command{
 		fmt.Println(sDim.Render("  Each agent authenticates with its own login — benchy stores no API keys."))
 		in := bufio.NewReader(os.Stdin)
 		anyAvailable := false
+		cfgDirty := false
 		for _, a := range adapter.All() {
 			if !a.Available() {
 				fmt.Printf("  %s %-13s not found on PATH\n", sWarn.Render("•"), a.ID())
 				continue
 			}
+			if cfg.AgentDisabled(a.ID()) {
+				if confirm(in, fmt.Sprintf("  %s %-13s currently skipped in benchy run — re-enable?", sWarn.Render("•"), a.ID())) {
+					cfg.SetAgentDisabled(a.ID(), false)
+					cfgDirty = true
+				} else {
+					continue
+				}
+			}
 			anyAvailable = true
 			ai := a.Auth()
 			fmt.Printf("  %s %-13s installed — %s\n", sOK.Render("✓"), a.ID(), sDim.Render(ai.Note))
-			if ai.LoginCmd != "" && confirm(in, fmt.Sprintf("      log in now with `%s`?", ai.LoginCmd)) {
-				if err := runLogin(ai.LoginCmd); err != nil {
-					fmt.Printf("      %s login exited: %v\n", sWarn.Render("!"), err)
+			if ai.LoginCmd != "" {
+				if confirm(in, fmt.Sprintf("      log in now with `%s`?", ai.LoginCmd)) {
+					if err := runLogin(ai.LoginCmd); err != nil {
+						fmt.Printf("      %s login exited: %v\n", sWarn.Render("!"), err)
+					}
+				} else if confirm(in, fmt.Sprintf("      skip %s in benchy run pickers?", a.ID())) {
+					cfg.SetAgentDisabled(a.ID(), true)
+					cfgDirty = true
+					fmt.Printf("      %s %s hidden from runs — re-enable any time with benchy setup\n", sDim.Render("·"), a.ID())
 				}
+			}
+		}
+		if cfgDirty {
+			if err := config.Save(cfg); err != nil {
+				return err
 			}
 		}
 		if !anyAvailable {
@@ -68,7 +88,7 @@ var setupCmd = &cobra.Command{
 
 		// 3. default judge
 		fmt.Println(sSect.Render("Judge"))
-		models := adapter.AvailableModelsWith(cfg.Models)
+		models := enabledModels(cfg)
 		items := make([]tui.Item, len(models))
 		for i, m := range models {
 			items[i] = tui.Item{Label: m.Ref(), Desc: m.Agent}

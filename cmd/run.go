@@ -44,9 +44,9 @@ chosen during ` + "`benchy setup`" + ` (default_judge in config.json).`,
 			fmt.Println("No evals yet. Capture one with /add-to-benchy inside Claude Code.")
 			return nil
 		}
-		models := adapter.AvailableModelsWith(cfg.Models)
+		models := enabledModels(cfg)
 		if len(models) == 0 {
-			fmt.Println("No coding agents found on PATH (claude, codex, cursor-agent, opencode).")
+			fmt.Println("No coding agents found on PATH (claude, codex, cursor-agent, opencode) — or all are skipped; run benchy setup to re-enable.")
 			return nil
 		}
 
@@ -101,7 +101,15 @@ chosen during ` + "`benchy setup`" + ` (default_judge in config.json).`,
 			}
 		}
 
-		var evalSel, modelSel, judgeSel []int // survive back-navigation
+		// Pre-select what last run used (config remembers titles/refs), so a
+		// repeat run is just enter, enter, enter.
+		evalSel := indicesWhere(len(snaps), func(i int) bool {
+			return contains(cfg.LastEvals, snaps[i].Title)
+		})
+		modelSel := indicesWhere(len(models), func(i int) bool {
+			return contains(cfg.LastModels, models[i].Ref())
+		})
+		var judgeSel []int // survive back-navigation
 		step := tui.StepEvals
 		for step < tui.StepRun {
 			switch step {
@@ -157,6 +165,17 @@ chosen during ` + "`benchy setup`" + ` (default_judge in config.json).`,
 				step++
 			}
 		}
+
+		// Remember this selection as the next run's default. Best-effort.
+		cfg.LastEvals = cfg.LastEvals[:0]
+		for _, e := range selEvals {
+			cfg.LastEvals = append(cfg.LastEvals, e.Title)
+		}
+		cfg.LastModels = cfg.LastModels[:0]
+		for _, m := range selModels {
+			cfg.LastModels = append(cfg.LastModels, m.Ref())
+		}
+		_ = config.Save(cfg)
 
 		// 4. run with a live progress view and a cancellable context: if the
 		// user quits the view, the agents must die too (they cost money).
@@ -293,4 +312,36 @@ func pick[T any](all []T, idxs []int) []T {
 		out = append(out, all[i])
 	}
 	return out
+}
+
+// enabledModels lists selectable models, honoring config model overrides and
+// the agents the user opted out of during setup.
+func enabledModels(cfg config.Config) []adapter.ModelRef {
+	all := adapter.AvailableModelsWith(cfg.Models)
+	out := all[:0]
+	for _, m := range all {
+		if !cfg.AgentDisabled(m.Agent) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func indicesWhere(n int, keep func(int) bool) []int {
+	var out []int
+	for i := 0; i < n; i++ {
+		if keep(i) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
