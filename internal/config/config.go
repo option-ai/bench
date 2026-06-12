@@ -90,6 +90,11 @@ type Config struct {
 	// Models optionally overrides an agent's selectable model list, keyed by
 	// agent id (e.g. "claude-code"). Empty/absent => use the agent's built-ins.
 	Models map[string][]string `json:"models,omitempty"`
+	// ReportResults opts into sending anonymous per-model scores (model name,
+	// composite, run count, judge) to the global leaderboard at benchy.run
+	// after each run. Prompts, diffs, and repo details are never sent. Default
+	// false; enable by setting "report_results": true in config.json.
+	ReportResults bool `json:"report_results"`
 }
 
 // Default returns the baseline config used on first run.

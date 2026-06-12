@@ -9,6 +9,7 @@ import (
 
 	"github.com/abdul/bench/internal/adapter"
 	"github.com/abdul/bench/internal/config"
+	"github.com/abdul/bench/internal/report"
 	"github.com/abdul/bench/internal/runner"
 	"github.com/abdul/bench/internal/snapshot"
 	"github.com/abdul/bench/internal/tui"
@@ -190,6 +191,13 @@ chosen during ` + "`bench setup`" + ` (default_judge in config.json).`,
 			}
 			fmt.Print(tui.RenderResults(res))
 			fmt.Printf("\nFull results: %s/run.json\n", res.Dir)
+			if cfg.ReportResults && !interrupted {
+				if err := report.Send(context.Background(), res.Judge, res.Leaderboard); err != nil {
+					fmt.Printf("Could not report to the global leaderboard: %v\n", err)
+				} else {
+					fmt.Println("Reported scores to the global leaderboard (benchy.run).")
+				}
+			}
 		}
 		return nil
 	},
