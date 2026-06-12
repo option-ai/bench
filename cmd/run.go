@@ -50,32 +50,36 @@ chosen during ` + "`bench setup`" + ` (default_judge in config.json).`,
 			return nil
 		}
 
-		// 1. evals: --evals flag, or picker
+		// Pickers run as one wizard (breadcrumb header, q/esc goes back a
+		// step, selections survive going back) — mirrors the benchy.run demo.
+		// Flags skip their step entirely.
+		evalItems := make([]tui.Item, len(snaps))
+		for i, s := range snaps {
+			anchor := "scratch"
+			if !s.IsScratch() {
+				anchor = fmt.Sprintf("%s@%.8s", s.Repo, s.Commit)
+			}
+			evalItems[i] = tui.Item{Label: s.Title, Desc: anchor}
+		}
+		modelItems := make([]tui.Item, len(models))
+		for i, m := range models {
+			modelItems[i] = tui.Item{Label: m.Ref(), Desc: m.Agent}
+		}
+
 		var selEvals []*snapshot.Snapshot
-		if len(flagEvals) > 0 {
+		var selModels []adapter.ModelRef
+		var judge adapter.ModelRef
+
+		evalsPicked := len(flagEvals) > 0
+		modelsPicked := len(flagModels) > 0
+		judgePicked := flagJudgeRef != "" || cfg.DefaultJudge != ""
+		if evalsPicked {
 			selEvals, err = evalsByName(snaps, flagEvals)
 			if err != nil {
 				return err
 			}
-		} else {
-			evalItems := make([]tui.Item, len(snaps))
-			for i, s := range snaps {
-				anchor := "scratch"
-				if !s.IsScratch() {
-					anchor = fmt.Sprintf("%s@%.8s", s.Repo, s.Commit)
-				}
-				evalItems[i] = tui.Item{Label: s.Title, Desc: anchor}
-			}
-			ei, err := tui.PickMany("Select evals to run", evalItems)
-			if err != nil {
-				return err
-			}
-			selEvals = pick(snaps, ei)
 		}
-
-		// 2. models: --models flag, or picker
-		var selModels []adapter.ModelRef
-		if len(flagModels) > 0 {
+		if modelsPicked {
 			for _, m := range flagModels {
 				ref, err := adapter.ParseRef(m)
 				if err != nil {
@@ -83,20 +87,7 @@ chosen during ` + "`bench setup`" + ` (default_judge in config.json).`,
 				}
 				selModels = append(selModels, ref)
 			}
-		} else {
-			modelItems := make([]tui.Item, len(models))
-			for i, m := range models {
-				modelItems[i] = tui.Item{Label: m.Ref(), Desc: m.Agent}
-			}
-			mi, err := tui.PickMany("Select models", modelItems)
-			if err != nil {
-				return err
-			}
-			selModels = pick(models, mi)
 		}
-
-		// 3. judge: --judge flag > config default_judge > picker
-		var judge adapter.ModelRef
 		switch {
 		case flagJudgeRef != "":
 			judge, err = adapter.ParseRef(flagJudgeRef)
@@ -108,16 +99,63 @@ chosen during ` + "`bench setup`" + ` (default_judge in config.json).`,
 			if err != nil {
 				return fmt.Errorf("config default_judge: %w", err)
 			}
-		default:
-			modelItems := make([]tui.Item, len(models))
-			for i, m := range models {
-				modelItems[i] = tui.Item{Label: m.Ref(), Desc: m.Agent}
+		}
+
+		var evalSel, modelSel, judgeSel []int // survive back-navigation
+		step := tui.StepEvals
+		for step < tui.StepRun {
+			switch step {
+			case tui.StepEvals:
+				if evalsPicked {
+					step++
+					continue
+				}
+				ei, _, err := tui.PickStep("Select evals to run", evalItems, true, tui.StepEvals, evalSel, false)
+				if err != nil {
+					return err
+				}
+				evalSel = ei
+				selEvals = pick(snaps, ei)
+				step++
+			case tui.StepModels:
+				if modelsPicked {
+					step++
+					continue
+				}
+				canBack := !evalsPicked
+				mi, back, err := tui.PickStep("Select models", modelItems, true, tui.StepModels, modelSel, canBack)
+				if err != nil {
+					return err
+				}
+				if back {
+					step--
+					continue
+				}
+				modelSel = mi
+				selModels = pick(models, mi)
+				step++
+			case tui.StepJudge:
+				if judgePicked {
+					step++
+					continue
+				}
+				canBack := !modelsPicked || !evalsPicked
+				ji, back, err := tui.PickStep("Select the judge (blind grader — sees only the diff + rubric)", modelItems, false, tui.StepJudge, judgeSel, canBack)
+				if err != nil {
+					return err
+				}
+				if back {
+					if modelsPicked {
+						step = tui.StepEvals
+					} else {
+						step--
+					}
+					continue
+				}
+				judgeSel = ji
+				judge = models[ji[0]]
+				step++
 			}
-			ji, err := tui.PickOne("Select the judge (blind grader — sees only the diff + rubric)", modelItems)
-			if err != nil {
-				return err
-			}
-			judge = models[ji]
 		}
 
 		// 4. run with a live progress view and a cancellable context: if the
@@ -189,6 +227,7 @@ chosen during ` + "`bench setup`" + ` (default_judge in config.json).`,
 			if interrupted {
 				fmt.Println("Run cancelled; partial results below.")
 			}
+			fmt.Println("\n" + tui.Crumbs(tui.StepResults))
 			fmt.Print(tui.RenderResults(res))
 			fmt.Printf("\nFull results: %s/run.json\n", res.Dir)
 			if cfg.ReportResults && !interrupted {

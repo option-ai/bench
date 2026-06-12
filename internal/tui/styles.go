@@ -5,18 +5,20 @@ import "github.com/charmbracelet/lipgloss"
 // Adaptive palette: lipgloss auto-detects the terminal background (via termenv)
 // and picks the Light or Dark variant, so output stays legible in both themes.
 //
-// Warm dark-terminal aesthetic from the bench design system: violet section
-// headers, amber accents (★, badges), score values graded green/amber/red,
+// Warm dark-terminal aesthetic from the bench design system (tokens/colors.css,
+// mirrored by the benchy.run interactive demo): violet section headers, magenta
+// selection cursor, carrot ★/accents, score values graded green/amber/red,
 // dim gray metadata.
 var (
-	cAccent = lipgloss.AdaptiveColor{Light: "#6C4FE0", Dark: "#8F7FF7"} // section headers (violet)
-	cStar   = lipgloss.AdaptiveColor{Light: "#B26A00", Dark: "#E8A87C"} // ★ winner, accent chip (amber)
-	cPick   = lipgloss.AdaptiveColor{Light: "#B26A00", Dark: "#E8A87C"} // cursor/selection
-	cGood   = lipgloss.AdaptiveColor{Light: "#2E7D32", Dark: "#86EFAC"} // success / high score
-	cWarn   = lipgloss.AdaptiveColor{Light: "#B26A00", Dark: "#F2C14E"} // warning / mid score
-	cErr    = lipgloss.AdaptiveColor{Light: "#C62828", Dark: "#F28B82"} // error / low score
-	cDim    = lipgloss.AdaptiveColor{Light: "#6E6E6E", Dark: "#8A8F98"} // muted
+	cAccent = lipgloss.AdaptiveColor{Light: "#6C4FE0", Dark: "#9D8CFF"} // section headers (violet)
+	cStar   = lipgloss.AdaptiveColor{Light: "#ED7032", Dark: "#F6A877"} // ★ winner, accent chip (carrot)
+	cPick   = lipgloss.AdaptiveColor{Light: "#C2185B", Dark: "#FF79C6"} // ▸ cursor/selection (magenta)
+	cGood   = lipgloss.AdaptiveColor{Light: "#2E7D32", Dark: "#73F59F"} // success / high score
+	cWarn   = lipgloss.AdaptiveColor{Light: "#B26A00", Dark: "#FFB454"} // warning / mid score
+	cErr    = lipgloss.AdaptiveColor{Light: "#C62828", Dark: "#FF6B6B"} // error / low score
+	cDim    = lipgloss.AdaptiveColor{Light: "#6E6E6E", Dark: "#9AA0A6"} // muted
 	cWinBg  = lipgloss.AdaptiveColor{Light: "#E7F3E9", Dark: "#222B22"} // winner-row tint
+	cCarrot = lipgloss.AdaptiveColor{Light: "#ED7032", Dark: "#ED7032"} // current-step marker
 
 	stTitle    = lipgloss.NewStyle().Bold(true).Foreground(cAccent)
 	stPick     = lipgloss.NewStyle().Foreground(cPick)

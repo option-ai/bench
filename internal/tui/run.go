@@ -75,6 +75,7 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m progressModel) View() string {
 	var b strings.Builder
+	b.WriteString(Crumbs(StepRun) + "\n\n")
 	for _, k := range m.order {
 		st := m.stage[k]
 		var status string
@@ -96,6 +97,7 @@ func (m progressModel) View() string {
 			pad(k.eval, m.wEval), pad(k.model, m.wModel), status)
 		b.WriteString(clip(line, m.width) + "\n")
 	}
+	b.WriteString("\n" + stTitle.Render("◐") + stDim.Render(" scoring with blind judge — never sees the model id") + "\n")
 	return b.String()
 }
 
@@ -168,7 +170,29 @@ func RenderResults(res *runner.RunResult) string {
 			pad(r.Eval, ew), stDim.Render(pad(r.Model, mw2)), evalOutcome(r))
 	}
 
+	if rat := renderRationales(res); rat != "" {
+		b.WriteString(rat)
+	}
+
 	b.WriteString("\n" + chips("judge "+res.Judge, fmt.Sprintf("config v%d", res.ConfigVer)) + "\n")
+	b.WriteString(stHelp.Render("run again: bench run · compare: bench results compare") + "\n")
+	return b.String()
+}
+
+// renderRationales lists the judge's reasoning per job, as in the demo's
+// results screen. Empty when no job carries a rationale.
+func renderRationales(res *runner.RunResult) string {
+	var b strings.Builder
+	for _, r := range res.Results {
+		if r.Rationale == "" {
+			continue
+		}
+		if b.Len() == 0 {
+			b.WriteString("\n" + stTitle.Render("Rationales") + "\n\n")
+		}
+		fmt.Fprintf(&b, "  %s\n", stHead.Render(r.Eval+" · "+r.Model))
+		fmt.Fprintf(&b, "    %s\n", r.Rationale)
+	}
 	return b.String()
 }
 
