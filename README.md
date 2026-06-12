@@ -1,6 +1,29 @@
-# bench
+<p align="center">
+  <a href="https://benchy.run"><img src="docs/assets/benchy-logo.png" alt="benchy" width="120" /></a>
+</p>
+
+<h1 align="center">bench</h1>
+
+<p align="center">
+  Benchmark coding agents on the work <b>you</b> actually do.
+  <br />
+  <a href="https://benchy.run">benchy.run</a> ·
+  <a href="https://github.com/option-ai/bench/releases">releases</a> ·
+  <a href="#scoring-the-single-number">scoring</a> ·
+  <a href="#architecture">architecture</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/option-ai/bench/releases"><img src="https://img.shields.io/github/v/release/option-ai/bench?color=ED7032" alt="release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2E7D32" alt="MIT license" /></a>
+  <img src="https://img.shields.io/badge/go-%3E%3D1.25-6C4FE0" alt="go version" />
+</p>
 
 A personal benchmark for coding agents, seeded from your **real** sessions.
+
+```sh
+curl -fsSL https://benchy.run/install | sh
+```
 
 Capture the prompts from a Claude Code conversation as an *eval* (with the repo
 + commit you were on). Later, replay those prompts against any installed coding
@@ -151,9 +174,23 @@ and cursor-agent are editable defaults. Override any of them via the "models"
 map in config.json. Test gates are binary (pass/fail); per-framework pass-ratio
 parsing is a future addition.
 
-## Build
+## Build from source
 
 ```
 go build -o bin/bench .
 go test ./...
 ```
+
+Prebuilt binaries for macOS and Linux (amd64/arm64) ship via
+[`benchy.run/install`](https://benchy.run/install) and the
+[releases page](https://github.com/option-ai/bench/releases).
+
+## Contributing
+
+Issues and PRs welcome. Keep changes small and tested (`go test ./...`);
+`internal/score` and `internal/tui` have the strictest coverage — match it for
+anything touching scoring or the TUI. For bigger ideas, open an issue first.
+
+## License
+
+[MIT](LICENSE)
