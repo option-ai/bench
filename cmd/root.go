@@ -20,12 +20,15 @@ Capture evals with the /add-to-benchy skill inside Claude Code, then run them he
 
 // Execute runs the root command.
 func Execute() {
-	if err := root.Execute(); err != nil {
+	err := root.Execute()
+	maybeUpdateHint()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
 func init() {
-	root.AddCommand(setupCmd, listCmd, modelsCmd, runCmd, resultsCmd, installCmd)
+	root.Version = version
+	root.AddCommand(setupCmd, listCmd, modelsCmd, runCmd, resultsCmd, installCmd, versionCmd, updateCmd)
 }
