@@ -14,7 +14,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/abdul/bench/internal/score"
+	"github.com/option-ai/bench/internal/score"
 )
 
 // Endpoint is where rows are POSTed. Override with $BENCH_LEADERBOARD_URL
@@ -39,7 +39,7 @@ type Row struct {
 }
 
 // Send posts the leaderboard rows. Best-effort: short timeout, no retries —
-// a failed report must never fail or slow down a bench run materially.
+// a failed report must never fail or slow down a benchy run materially.
 func Send(ctx context.Context, judge string, rows []score.LeaderRow) error {
 	if len(rows) == 0 {
 		return nil

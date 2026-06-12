@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abdul/bench/internal/adapter"
-	"github.com/abdul/bench/internal/config"
-	"github.com/abdul/bench/internal/report"
-	"github.com/abdul/bench/internal/runner"
-	"github.com/abdul/bench/internal/snapshot"
-	"github.com/abdul/bench/internal/tui"
+	"github.com/option-ai/bench/internal/adapter"
+	"github.com/option-ai/bench/internal/config"
+	"github.com/option-ai/bench/internal/report"
+	"github.com/option-ai/bench/internal/runner"
+	"github.com/option-ai/bench/internal/snapshot"
+	"github.com/option-ai/bench/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +29,7 @@ var runCmd = &cobra.Command{
 	Short: "Select evals + models, run them, and score into a leaderboard",
 	Long: `Interactively pick evals and models, or pass --evals/--models/--judge to skip
 the pickers entirely (useful for scripting). The judge defaults to the one
-chosen during ` + "`bench setup`" + ` (default_judge in config.json).`,
+chosen during ` + "`benchy setup`" + ` (default_judge in config.json).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -41,7 +41,7 @@ chosen during ` + "`bench setup`" + ` (default_judge in config.json).`,
 			return err
 		}
 		if len(snaps) == 0 {
-			fmt.Println("No evals yet. Capture one with /add-to-bench inside Claude Code.")
+			fmt.Println("No evals yet. Capture one with /add-to-benchy inside Claude Code.")
 			return nil
 		}
 		models := adapter.AvailableModelsWith(cfg.Models)

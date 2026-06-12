@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/abdul/bench/internal/runner"
-	"github.com/abdul/bench/internal/tui"
+	"github.com/option-ai/bench/internal/runner"
+	"github.com/option-ai/bench/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +30,7 @@ Use "results compare <a> <b>" to diff two runs model-by-model.`,
 			return err
 		}
 		if len(runs) == 0 {
-			fmt.Println("No runs yet. `bench run` to create one.")
+			fmt.Println("No runs yet. `benchy run` to create one.")
 			return nil
 		}
 		fmt.Println(tui.RenderAllTime(runs))

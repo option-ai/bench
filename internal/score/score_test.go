@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/abdul/bench/internal/config"
+	"github.com/option-ai/bench/internal/config"
 )
 
 func approx(a, b float64) bool { return math.Abs(a-b) < 0.01 }

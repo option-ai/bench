@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/abdul/bench/internal/snapshot"
+	"github.com/option-ai/bench/internal/snapshot"
 	"os"
 	"os/exec"
 	"strings"

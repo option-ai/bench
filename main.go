@@ -1,5 +1,5 @@
 package main
 
-import "github.com/abdul/bench/cmd"
+import "github.com/option-ai/bench/cmd"
 
 func main() { cmd.Execute() }

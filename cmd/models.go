@@ -3,15 +3,15 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/abdul/bench/internal/adapter"
-	"github.com/abdul/bench/internal/config"
+	"github.com/option-ai/bench/internal/adapter"
+	"github.com/option-ai/bench/internal/config"
 	"github.com/spf13/cobra"
 )
 
 var modelsCmd = &cobra.Command{
 	Use:   "models",
-	Short: "List the agents bench detects and the models it will offer",
-	Long: `Shows every installed agent and the model ids bench will present in ` + "`bench run`" + `,
+	Short: "List the agents benchy detects and the models it will offer",
+	Long: `Shows every installed agent and the model ids benchy will present in ` + "`benchy run`" + `,
 after applying any per-agent overrides from config.json ("models" map). Use this
 to confirm a newly-released model shows up; if it doesn't, add it under "models"
 in config.json (path shown below).`,

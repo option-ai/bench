@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/abdul/bench/internal/runner"
-	"github.com/abdul/bench/internal/score"
+	"github.com/option-ai/bench/internal/runner"
+	"github.com/option-ai/bench/internal/score"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -175,7 +175,7 @@ func RenderResults(res *runner.RunResult) string {
 	}
 
 	b.WriteString("\n" + chips("judge "+res.Judge, fmt.Sprintf("config v%d", res.ConfigVer)) + "\n")
-	b.WriteString(stHelp.Render("run again: bench run · compare: bench results compare") + "\n")
+	b.WriteString(stHelp.Render("run again: benchy run · compare: benchy results compare") + "\n")
 	return b.String()
 }
 
