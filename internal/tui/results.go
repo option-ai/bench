@@ -156,14 +156,6 @@ func RenderRunDetail(r *runner.RunResult) string {
 	b.WriteString(stTitle.Render("Run "+r.ID) + "\n")
 	b.WriteString(stDim.Render(fmt.Sprintf("  started %s · judge %s · config v%d", r.StartedAt, r.Judge, r.ConfigVer)) + "\n")
 	b.WriteString(RenderResults(r))
-	b.WriteString("\n" + stTitle.Render("Rationales") + "\n")
-	for _, res := range r.Results {
-		if res.Rationale == "" {
-			continue
-		}
-		fmt.Fprintf(&b, "  %s\n", stHead.Render(res.Eval+" · "+res.Model))
-		fmt.Fprintf(&b, "    %s\n", res.Rationale)
-	}
 	b.WriteString(stDim.Render("\n  artifacts: "+r.Dir+"/jobs/") + "\n")
 	return b.String()
 }

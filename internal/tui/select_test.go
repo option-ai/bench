@@ -92,3 +92,53 @@ func TestSmallTerminalShrinksWindow(t *testing.T) {
 		t.Fatalf("want visible=4 on height 10, got %d", sm.visible)
 	}
 }
+
+func TestQGoesBackWhenAllowed(t *testing.T) {
+	m := newModel(5, true)
+	m.canBack = true
+	var mod tea.Model = m
+	mod, _ = mod.(selectModel).Update(key("q"))
+	sm := mod.(selectModel)
+	if !sm.back || sm.canceled {
+		t.Fatalf("q with canBack: want back=true canceled=false, got back=%v canceled=%v", sm.back, sm.canceled)
+	}
+}
+
+func TestQCancelsOnFirstStep(t *testing.T) {
+	m := newModel(5, true)
+	var mod tea.Model = m
+	mod, _ = mod.(selectModel).Update(key("q"))
+	sm := mod.(selectModel)
+	if sm.back || !sm.canceled {
+		t.Fatalf("q without canBack: want canceled=true, got back=%v canceled=%v", sm.back, sm.canceled)
+	}
+}
+
+func TestCrumbsInView(t *testing.T) {
+	m := newModel(3, true)
+	m.crumbs = true
+	m.step = StepModels
+	v := m.View()
+	for _, want := range []string{"✓ evals", "● models", "○ judge", "○ run", "○ results"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("breadcrumb missing %q in:\n%s", want, v)
+		}
+	}
+	if !strings.Contains(v, "q back") {
+		// crumbs without canBack still says cancel; flip and re-check
+		m.canBack = true
+		if !strings.Contains(m.View(), "q back") {
+			t.Fatalf("expected 'q back' hint when canBack")
+		}
+	}
+}
+
+func TestSeededSelectionsSurviveBack(t *testing.T) {
+	items := []Item{{Label: "a"}, {Label: "b"}, {Label: "c"}}
+	chosen := map[int]bool{0: true, 2: true}
+	m := selectModel{title: "t", items: items, chosen: chosen, multi: true, visible: maxVisible}
+	v := m.View()
+	if !strings.Contains(v, "(2/3 selected)") {
+		t.Fatalf("expected seeded selections in count, got:\n%s", v)
+	}
+}

@@ -30,6 +30,10 @@ type selectModel struct {
 	multi    bool
 	done     bool
 	canceled bool
+	crumbs   bool // show the wizard breadcrumb header
+	step     int  // breadcrumb index (StepEvals…) when crumbs is set
+	canBack  bool // q/esc goes back a step instead of cancelling
+	back     bool // user asked to go back
 }
 
 func (m selectModel) Init() tea.Cmd { return nil }
@@ -55,7 +59,11 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		// leave room for title, indicators, and help text
-		m.visible = msg.Height - 6
+		chrome := 6
+		if m.crumbs {
+			chrome = 8 // breadcrumb + spacer
+		}
+		m.visible = msg.Height - chrome
 		if m.visible > maxVisible {
 			m.visible = maxVisible
 		}
@@ -66,8 +74,15 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "ctrl+c":
 			m.canceled = true
+			return m, tea.Quit
+		case "q", "esc":
+			if m.canBack {
+				m.back = true
+			} else {
+				m.canceled = true
+			}
 			return m, tea.Quit
 		case "up", "k":
 			if m.cursor > 0 {
@@ -121,10 +136,13 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m selectModel) View() string {
-	if m.done || m.canceled {
+	if m.done || m.canceled || m.back {
 		return ""
 	}
 	var b strings.Builder
+	if m.crumbs {
+		b.WriteString(Crumbs(m.step) + "\n\n")
+	}
 	title := m.title
 	if m.multi {
 		n := 0
@@ -170,9 +188,13 @@ func (m selectModel) View() string {
 		b.WriteString(stDim.Render(fmt.Sprintf("  ↓ %d more", rest)) + "\n")
 	}
 
-	hint := "↑/↓ move · pgup/pgdn jump · enter confirm · q cancel"
+	qHint := "q cancel"
+	if m.canBack {
+		qHint = "q back"
+	}
+	hint := "↑/↓ move · pgup/pgdn jump · enter confirm · " + qHint
 	if m.multi {
-		hint = "↑/↓ move · space toggle · a all · pgup/pgdn jump · enter confirm · q cancel"
+		hint = "↑/↓ move · space toggle · a all · pgup/pgdn jump · enter confirm · " + qHint
 	}
 	b.WriteString(stHelp.Render(hint))
 	return b.String()
@@ -180,36 +202,60 @@ func (m selectModel) View() string {
 
 // PickMany shows a multi-select and returns the chosen indices.
 func PickMany(title string, items []Item) ([]int, error) {
-	return runSelect(title, items, true)
+	idxs, _, err := runSelect(title, items, true, false, 0, nil, false)
+	return idxs, err
 }
 
 // PickOne shows a single-select and returns the chosen index.
 func PickOne(title string, items []Item) (int, error) {
-	idxs, err := runSelect(title, items, false)
+	idxs, _, err := runSelect(title, items, false, false, 0, nil, false)
 	if err != nil {
 		return -1, err
 	}
 	return idxs[0], nil
 }
 
-func runSelect(title string, items []Item, multi bool) ([]int, error) {
+// PickStep shows one wizard step (breadcrumb header, demo-style). prev seeds
+// the selection so going back preserves choices; canBack rebinds q/esc from
+// cancel to "go back one step" (back=true in the return). ctrl+c always
+// cancels.
+func PickStep(title string, items []Item, multi bool, step int, prev []int, canBack bool) (idxs []int, back bool, err error) {
+	chosen := map[int]bool{}
+	for _, i := range prev {
+		if i >= 0 && i < len(items) {
+			chosen[i] = true
+		}
+	}
+	return runSelect(title, items, multi, true, step, chosen, canBack)
+}
+
+func runSelect(title string, items []Item, multi bool, crumbs bool, step int, chosen map[int]bool, canBack bool) ([]int, bool, error) {
 	if len(items) == 0 {
-		return nil, fmt.Errorf("nothing to select")
+		return nil, false, fmt.Errorf("nothing to select")
+	}
+	if chosen == nil {
+		chosen = map[int]bool{}
 	}
 	m := selectModel{
 		title:   title,
 		items:   items,
-		chosen:  map[int]bool{},
+		chosen:  chosen,
 		multi:   multi,
 		visible: maxVisible,
+		crumbs:  crumbs,
+		step:    step,
+		canBack: canBack,
 	}
 	out, err := tea.NewProgram(m).Run()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	fm := out.(selectModel)
 	if fm.canceled {
-		return nil, fmt.Errorf("canceled")
+		return nil, false, fmt.Errorf("canceled")
+	}
+	if fm.back {
+		return nil, true, nil
 	}
 	var idxs []int
 	for i := range items {
@@ -217,5 +263,5 @@ func runSelect(title string, items []Item, multi bool) ([]int, error) {
 			idxs = append(idxs, i)
 		}
 	}
-	return idxs, nil
+	return idxs, false, nil
 }
