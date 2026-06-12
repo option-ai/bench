@@ -2,7 +2,7 @@
   <a href="https://benchy.run"><img src="docs/assets/benchy-logo.png" alt="benchy" width="120" /></a>
 </p>
 
-<h1 align="center">bench</h1>
+<h1 align="center">benchy</h1>
 
 <p align="center">
   Benchmark coding agents on the work <b>you</b> actually do.
@@ -31,35 +31,35 @@ agent on that exact repo state, and a **blind judge** scores each diff into a
 single composite number so you can compare models head-to-head.
 
 ```
-/add-to-bench   capture the current session as an eval   (Claude Code skill)
-bench setup     guided setup: install skill, agent logins, pick default judge
-bench run       pick evals × models, run, score (judge from config or --judge)
-bench run --evals a,b --models claude-code:claude-fable-5   # non-interactive
-bench list      list your evals
-bench results   all-time leaderboard, run history, detail, compare two runs
-bench models    show detected agents + the model ids bench will offer
-bench install   non-interactive: install skill + config only
+/add-to-benchy   capture the current session as an eval   (Claude Code skill)
+benchy setup     guided setup: install skill, agent logins, pick default judge
+benchy run       pick evals × models, run, score (judge from config or --judge)
+benchy run --evals a,b --models claude-code:claude-fable-5   # non-interactive
+benchy list      list your evals
+benchy results   all-time leaderboard, run history, detail, compare two runs
+benchy models    show detected agents + the model ids benchy will offer
+benchy install   non-interactive: install skill + config only
 ```
 
 ## Concepts
 
 - **eval** — one captured task: prompts + optional feedback rubric, optionally
   anchored to a repo + commit. One markdown file under
-  `~/.config/bench/snapshots/`. Two flavours:
+  `~/.config/benchy/snapshots/`. Two flavours:
   - **repo-backed** — replays the prompts against an exact repo state; the judge
     scores the diff.
   - **scratch** — no repo (sessions captured in Claude Desktop, ChatGPT desktop,
     Cowork, or from-scratch tasks). The agent runs in a fresh empty workspace
     and the judge scores whatever it produces — created files and/or its written
     answer.
-- **bench** — the set of evals you select for a run.
+- **bench** — the set of evals you select for a run (the one thing still called bench).
 - **judge** — a model that grades a diff *blind*: it sees the task and the
   feedback rubric, never the model identity or the agent's reasoning.
 
 ## Auth
 
-Every supported agent authenticates with **its own login** — bench stores no
-API keys at all. `bench setup` walks you through it and can launch each login
+Every supported agent authenticates with **its own login** — benchy stores no
+API keys at all. `benchy setup` walks you through it and can launch each login
 inline:
 
 | agent        | login                                         |
@@ -79,20 +79,20 @@ composite = judge_overall × gate_factor
 
 - `judge_overall` — rubric-weighted mean of four 0–100 sub-scores:
   task completion (0.40), correctness (0.30), feedback adherence (0.20),
-  scope discipline (0.10). Weights live in `~/.config/bench/config.json`.
+  scope discipline (0.10). Weights live in `~/.config/benchy/config.json`.
 - `gate_factor` — starts at 1.0; **build failure caps it at 0.30**, test
   failure ×0.5 (`test_fail_factor`), lint failure −0.10. Clamped to `[0,1]`.
   So a pretty diff that doesn't compile can't beat an ugly one that does.
 
 A model's leaderboard number is the mean composite across the evals it ran.
 The config version is stamped into every run so numbers stay comparable.
-`bench results` aggregates every persisted run into an all-time leaderboard,
+`benchy results` aggregates every persisted run into an all-time leaderboard,
 shows any past run in full (scores, rationales, artifact paths), and
-`bench results compare <a> <b>` diffs two runs model-by-model.
+`benchy results compare <a> <b>` diffs two runs model-by-model.
 
 ## Rate limits
 
-The agent CLIs don't expose RPM/TPM quotas, so bench can't query limits — it
+The agent CLIs don't expose RPM/TPM quotas, so benchy can't query limits — it
 defends instead: at most `per_agent_concurrency` (default 2) concurrent jobs
 per agent CLI, and failures that look like rate-limiting (429, quota,
 overloaded…) get the workspace reset and the job retried with backoff
@@ -128,7 +128,7 @@ not reacting to the agent; conversation evals test moments, not trajectories.
 ## Layout
 
 ```
-~/.config/bench/
+~/.config/benchy/
   snapshots/*.md       evals
   config.json          scoring weights, defaults, default judge, model overrides
   cache/               cloned repos + model-list caches, reused across runs
@@ -151,7 +151,7 @@ internal/
   score/             composite scoring + leaderboard (unit-tested)
   runner/            orchestration: clone → worktree → agent → diff → gates → judge
   tui/               Bubble Tea selection screens
-  skill/             embedded /add-to-bench SKILL.md
+  skill/             embedded /add-to-benchy SKILL.md
 ```
 
 ## Judge integrity
@@ -177,7 +177,7 @@ parsing is a future addition.
 ## Build from source
 
 ```
-go build -o bin/bench .
+go build -o bin/benchy .
 go test ./...
 ```
 

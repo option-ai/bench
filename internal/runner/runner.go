@@ -1,4 +1,4 @@
-// Package runner orchestrates a bench run: clone each repo once, add a detached
+// Package runner orchestrates a benchy run: clone each repo once, add a detached
 // worktree per (eval x model) at the eval's commit, drive the agent, capture
 // the diff, run deterministic gates, then hand the diff to a blind judge and
 // fold everything into a composite score.
@@ -14,11 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/abdul/bench/internal/adapter"
-	"github.com/abdul/bench/internal/config"
-	"github.com/abdul/bench/internal/judge"
-	"github.com/abdul/bench/internal/score"
-	"github.com/abdul/bench/internal/snapshot"
+	"github.com/option-ai/bench/internal/adapter"
+	"github.com/option-ai/bench/internal/config"
+	"github.com/option-ai/bench/internal/judge"
+	"github.com/option-ai/bench/internal/score"
+	"github.com/option-ai/bench/internal/snapshot"
 )
 
 // Stage marks where a job is in the pipeline (for the TUI status grid).

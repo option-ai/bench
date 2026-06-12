@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Wizard steps for `bench run`, mirrored from the benchy.run interactive demo:
+// Wizard steps for `benchy run`, mirrored from the benchy.run interactive demo:
 // evals › models › judge › run › results.
 const (
 	StepEvals = iota

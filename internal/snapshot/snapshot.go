@@ -1,6 +1,6 @@
 // Package snapshot reads and writes evals: a single markdown file with YAML
 // frontmatter (the machine-readable metadata) and a body holding the user
-// prompts. One file == one eval. A bench run is a set of these.
+// prompts. One file == one eval. A benchy run is a set of these.
 package snapshot
 
 import (
@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/abdul/bench/internal/config"
+	"github.com/option-ai/bench/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

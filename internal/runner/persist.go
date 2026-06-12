@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/abdul/bench/internal/config"
-	"github.com/abdul/bench/internal/snapshot"
+	"github.com/option-ai/bench/internal/config"
+	"github.com/option-ai/bench/internal/snapshot"
 )
 
 // persist writes the aggregate run result as run.json. Per-job diff/output
@@ -103,4 +103,4 @@ type runErr string
 func (e runErr) Error() string { return string(e) }
 
 func errAmbiguous(id string) error { return runErr("run id prefix \"" + id + "\" is ambiguous") }
-func errNoRun(id string) error     { return runErr("no run matching \"" + id + "\" (see `bench results`)") }
+func errNoRun(id string) error     { return runErr("no run matching \"" + id + "\" (see `benchy results`)") }

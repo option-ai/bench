@@ -1,4 +1,4 @@
-// Package tui holds the interactive selection screens for `bench run`: pick the
+// Package tui holds the interactive selection screens for `benchy run`: pick the
 // evals, pick the models (filtered to installed agents), pick the judge.
 package tui
 

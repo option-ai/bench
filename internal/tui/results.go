@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/abdul/bench/internal/runner"
-	"github.com/abdul/bench/internal/score"
+	"github.com/option-ai/bench/internal/runner"
+	"github.com/option-ai/bench/internal/score"
 )
 
 // RenderRunList shows past runs, newest first: id, size, judge, winner.
@@ -33,7 +33,7 @@ func RenderRunList(runs []*runner.RunResult) string {
 			stDim.Render(fmt.Sprintf("%d eval(s) × %d result(s) · judge %s", len(nEvals), len(r.Results), r.Judge)),
 			winner)
 	}
-	b.WriteString(stHelp.Render("bench results <id> for detail · bench results compare <a> <b>"))
+	b.WriteString(stHelp.Render("benchy results <id> for detail · benchy results compare <a> <b>"))
 	return b.String()
 }
 

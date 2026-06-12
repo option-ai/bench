@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/abdul/bench/internal/snapshot"
+	"github.com/option-ai/bench/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +16,7 @@ var listCmd = &cobra.Command{
 			return err
 		}
 		if len(snaps) == 0 {
-			fmt.Println("No evals yet. Capture one with /add-to-bench inside Claude Code.")
+			fmt.Println("No evals yet. Capture one with /add-to-benchy inside Claude Code.")
 			return nil
 		}
 		for _, s := range snaps {

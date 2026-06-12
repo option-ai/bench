@@ -1,6 +1,6 @@
 // Package score turns a judge's rubric sub-scores plus deterministic gate
 // outcomes into a single composite number per (eval x model), and aggregates
-// those into one number per model across a bench run.
+// those into one number per model across a benchy run.
 //
 // composite = judge_overall * gate_factor
 //
@@ -15,7 +15,7 @@ package score
 import (
 	"sort"
 
-	"github.com/abdul/bench/internal/config"
+	"github.com/option-ai/bench/internal/config"
 )
 
 // Subscores are the judge's four rubric dimensions, each 0..100.

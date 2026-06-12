@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/abdul/bench/internal/config"
+	"github.com/option-ai/bench/internal/config"
 )
 
 // Model lists are a menu, not a source of truth: codex and opencode are read

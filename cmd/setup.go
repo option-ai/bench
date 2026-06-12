@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/abdul/bench/internal/adapter"
-	"github.com/abdul/bench/internal/config"
-	"github.com/abdul/bench/internal/skill"
-	"github.com/abdul/bench/internal/tui"
+	"github.com/option-ai/bench/internal/adapter"
+	"github.com/option-ai/bench/internal/config"
+	"github.com/option-ai/bench/internal/skill"
+	"github.com/option-ai/bench/internal/tui"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,7 @@ var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Guided setup: install the skill, check agent logins, pick your judge",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(sTitle.Render("bench setup"))
+		fmt.Println(sTitle.Render("benchy setup"))
 
 		// 1. config + skill
 		cfg, err := config.Load()
@@ -44,7 +44,7 @@ var setupCmd = &cobra.Command{
 
 		// 2. agents + login (each agent uses its own login, not an API key)
 		fmt.Println(sSect.Render("Coding agents"))
-		fmt.Println(sDim.Render("  Each agent authenticates with its own login — bench stores no API keys."))
+		fmt.Println(sDim.Render("  Each agent authenticates with its own login — benchy stores no API keys."))
 		in := bufio.NewReader(os.Stdin)
 		anyAvailable := false
 		for _, a := range adapter.All() {
@@ -86,8 +86,8 @@ var setupCmd = &cobra.Command{
 
 		// 4. summary
 		fmt.Println(sSect.Render("Ready"))
-		fmt.Println("  • Capture evals with /add-to-bench inside Claude Code (new session to load the skill)")
-		fmt.Println("  • Run them with `bench run`")
+		fmt.Println("  • Capture evals with /add-to-benchy inside Claude Code (new session to load the skill)")
+		fmt.Println("  • Run them with `benchy run`")
 		fmt.Println("  • Tune scoring in " + config.Dir() + "/config.json")
 		return nil
 	},

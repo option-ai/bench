@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abdul/bench/internal/adapter"
-	"github.com/abdul/bench/internal/score"
+	"github.com/option-ai/bench/internal/adapter"
+	"github.com/option-ai/bench/internal/score"
 )
 
 // maxDiffBytes caps how much diff the judge sees. Beyond this we truncate with

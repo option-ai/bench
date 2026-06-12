@@ -1,4 +1,4 @@
-// Package config owns the on-disk layout under ~/.config/bench and the two
+// Package config owns the on-disk layout under ~/.config/benchy and the two
 // JSON files we persist: config.json (defaults, rubric weights, model registry)
 // and auth.json (provider keys, written 0600).
 package config
@@ -8,10 +8,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
-// Dir is the root config directory. Override with $BENCH_HOME for tests.
+// Dir is the root config directory. Override with $BENCHY_HOME (or the
+// legacy $BENCH_HOME) for tests.
 func Dir() string {
+	if h := os.Getenv("BENCHY_HOME"); h != "" {
+		return h
+	}
 	if h := os.Getenv("BENCH_HOME"); h != "" {
 		return h
 	}
@@ -20,8 +25,28 @@ func Dir() string {
 		home, _ := os.UserHomeDir()
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "bench")
+	dir := filepath.Join(base, "benchy")
+	migrateLegacyDir(filepath.Join(base, "bench"), dir)
+	return dir
 }
+
+// migrateLegacyDir renames the pre-rebrand ~/.config/bench tree to
+// ~/.config/benchy, once, the first time the new path is resolved. Best
+// effort: if the rename fails (permissions, cross-device), the new dir is
+// simply created fresh by EnsureDirs.
+func migrateLegacyDir(old, new string) {
+	migrateOnce.Do(func() {
+		if _, err := os.Stat(new); !os.IsNotExist(err) {
+			return
+		}
+		if fi, err := os.Stat(old); err != nil || !fi.IsDir() {
+			return
+		}
+		_ = os.Rename(old, new)
+	})
+}
+
+var migrateOnce sync.Once
 
 func SnapshotsDir() string { return filepath.Join(Dir(), "snapshots") }
 func CacheDir() string     { return filepath.Join(Dir(), "cache") }
