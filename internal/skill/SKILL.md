@@ -1,8 +1,8 @@
 ---
 name: add-to-benchy
 description: Capture the current conversation as a benchy eval — grabs all user prompts (and, if you're in a git repo, the repo + commit) and writes a snapshot the `benchy` CLI can replay against other models. Works with or without a repo, so it's usable from coding sessions and from repo-less environments alike. Use when the user says "add this to my benchy", "/add-to-benchy", "snapshot this for evals", or wants to turn the current session into a benchmark case.
-argument-hint: "[title] [feedback…]"
-arguments: [title, feedback]
+argument-hint: "[feedback…]"
+arguments: [feedback]
 allowed-tools: Read Write Bash(git *) Bash(mkdir *)
 ---
 
@@ -21,19 +21,18 @@ An eval comes in two flavours, chosen automatically:
   agent in a fresh empty workspace and judges whatever it produces (created
   files and/or its written answer).
 
-## Arguments (both optional)
+## Arguments (optional)
 
 The raw invocation arguments are: `$ARGUMENTS`
 
-- **title** — the FIRST whitespace-delimited token of the arguments. If there
-  are no arguments, infer a short kebab-case title from what the session was
-  about.
-- **feedback** — EVERYTHING after the first token, as one string (feedback is
-  normally a sentence; do not take just one word). If nothing follows the
-  title, leave the frontmatter line out.
+- **feedback** — the ENTIRE argument string, as one string (it is normally a
+  sentence). If there are no arguments, leave the feedback frontmatter line
+  out. The judge scores against this note, so keep it verbatim.
 
-If the user instead wrote `title=... feedback="..."` or described them in
-prose, honor that.
+You decide the **title**: infer a short kebab-case slug (2–5 words) from what
+the session was actually about — name the task, not the repo (e.g.
+`fix-flaky-auth-test`, not `api-changes`). If the user explicitly states a
+title in prose (e.g. "call it X"), honor that instead.
 
 ## Steps
 
