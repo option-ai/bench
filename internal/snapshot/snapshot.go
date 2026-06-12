@@ -29,6 +29,9 @@ type meta struct {
 	Title    string            `yaml:"title"`
 	Repo     string            `yaml:"repo,omitempty"`   // optional: empty => scratch eval
 	Commit   string            `yaml:"commit,omitempty"` // optional: required only if Repo is set
+	// SourcePath is the absolute path of the repo on the capturing machine —
+	// the clone fallback when the remote needs auth this process doesn't have.
+	SourcePath string `yaml:"source_path,omitempty"`
 	Created  string            `yaml:"created"`
 	Feedback string            `yaml:"feedback,omitempty"`
 	Replay   config.ReplayMode `yaml:"replay,omitempty"`

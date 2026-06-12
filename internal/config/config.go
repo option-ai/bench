@@ -115,6 +115,14 @@ type Config struct {
 	// Models optionally overrides an agent's selectable model list, keyed by
 	// agent id (e.g. "claude-code"). Empty/absent => use the agent's built-ins.
 	Models map[string][]string `json:"models,omitempty"`
+	// DisabledAgents lists agent ids the user opted out of during `benchy
+	// setup`; their models are hidden from the run/judge pickers until
+	// re-enabled in setup.
+	DisabledAgents []string `json:"disabled_agents,omitempty"`
+	// LastEvals/LastModels remember the previous run's selections (eval titles
+	// and model refs) and pre-select them in the next interactive run.
+	LastEvals  []string `json:"last_evals,omitempty"`
+	LastModels []string `json:"last_models,omitempty"`
 	// ReportResults opts into sending anonymous per-model scores (model name,
 	// composite, run count, judge) to the global leaderboard at benchy.run
 	// after each run. Prompts, diffs, and repo details are never sent. Default
@@ -170,4 +178,28 @@ func Save(c Config) error {
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
 	return os.WriteFile(configPath(), b, 0o644)
+}
+
+// AgentDisabled reports whether the user opted this agent out during setup.
+func (c Config) AgentDisabled(id string) bool {
+	for _, d := range c.DisabledAgents {
+		if d == id {
+			return true
+		}
+	}
+	return false
+}
+
+// SetAgentDisabled adds or removes id from the disabled list.
+func (c *Config) SetAgentDisabled(id string, disabled bool) {
+	out := c.DisabledAgents[:0]
+	for _, d := range c.DisabledAgents {
+		if d != id {
+			out = append(out, d)
+		}
+	}
+	if disabled {
+		out = append(out, id)
+	}
+	c.DisabledAgents = out
 }

@@ -118,7 +118,7 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 	// Clone each distinct repo once into the run's cache, reused across jobs.
 	clones := map[string]string{}
 	var cloneMu sync.Mutex
-	cloneRepo := func(repo string) (string, error) {
+	cloneRepo := func(repo, sourcePath string) (string, error) {
 		cloneMu.Lock()
 		defer cloneMu.Unlock()
 		if p, ok := clones[repo]; ok {
@@ -126,7 +126,7 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 		}
 		dest := filepath.Join(config.CacheDir(), snapshot.Slug(repo))
 		if _, err := os.Stat(filepath.Join(dest, ".git")); err != nil {
-			if err := gitClone(ctx, repo, dest); err != nil {
+			if err := gitClone(ctx, repo, sourcePath, dest); err != nil {
 				return "", err
 			}
 		} else {
@@ -214,7 +214,7 @@ func Run(ctx context.Context, o Options) (*RunResult, error) {
 	return res, nil
 }
 
-func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.ModelRef, work, runDir string, cloneRepo func(string) (string, error), lockFor func(string) *sync.Mutex) score.Result {
+func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.ModelRef, work, runDir string, cloneRepo func(string, string) (string, error), lockFor func(string) *sync.Mutex) score.Result {
 	r := score.Result{Eval: e.Title, Model: m.Ref()}
 	fail := func(stage Stage, err error) score.Result {
 		emit(o.Events, Event{e.Title, m.Ref(), StageError, err})
@@ -233,7 +233,7 @@ func runJob(ctx context.Context, o Options, e *snapshot.Snapshot, m adapter.Mode
 		}
 	} else {
 		var err error
-		cache, err = cloneRepo(e.Repo)
+		cache, err = cloneRepo(e.Repo, e.SourcePath)
 		if err != nil {
 			return fail(StageClone, err)
 		}

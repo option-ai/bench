@@ -27,6 +27,10 @@ func git(ctx context.Context, dir string, args ...string) ([]byte, error) {
 		cmd.Dir = dir
 	}
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if os.Getenv("GIT_SSH_COMMAND") == "" {
+		// never hang on an ssh password prompt during clone fallbacks
+		cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -oBatchMode=yes")
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, out)
@@ -34,9 +38,53 @@ func git(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	return out, nil
 }
 
-func gitClone(ctx context.Context, repo, dest string) error {
-	_, err := git(ctx, "", "clone", "--quiet", repoURL(repo), dest)
-	return err
+// gitClone clones repo into dest, falling back through auth strategies so
+// private repos work without interactive prompts: plain https → the gh CLI's
+// credential helper → an ssh remote rewrite → the local path the eval was
+// captured from (source_path). The aggregated error tells the user how to fix
+// auth rather than just "exit status 128".
+func gitClone(ctx context.Context, repo, sourcePath, dest string) error {
+	url := repoURL(repo)
+	var errs []string
+	try := func(label string, args ...string) bool {
+		_ = os.RemoveAll(dest) // a failed attempt may leave a partial dir
+		if _, err := git(ctx, "", args...); err != nil {
+			errs = append(errs, label+": "+strings.TrimSpace(err.Error()))
+			return false
+		}
+		return true
+	}
+
+	if try("https", "clone", "--quiet", url, dest) {
+		return nil
+	}
+	if strings.HasPrefix(url, "https://") {
+		if _, err := exec.LookPath("gh"); err == nil {
+			if try("gh-auth", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential",
+				"clone", "--quiet", url, dest) {
+				return nil
+			}
+		}
+		// https://host/owner/name(.git) → git@host:owner/name.git
+		rest := strings.TrimPrefix(url, "https://")
+		if host, path, ok := strings.Cut(rest, "/"); ok {
+			ssh := "git@" + host + ":" + strings.TrimSuffix(path, ".git") + ".git"
+			if try("ssh", "clone", "--quiet", ssh, dest) {
+				return nil
+			}
+		}
+	}
+	if sourcePath != "" {
+		if fi, err := os.Stat(sourcePath); err == nil && fi.IsDir() {
+			if try("local "+sourcePath, "clone", "--quiet", sourcePath, dest) {
+				return nil
+			}
+		} else {
+			errs = append(errs, "local: "+sourcePath+" not present on this machine")
+		}
+	}
+	return fmt.Errorf("could not clone %s — if it is private, run `gh auth login`, set up ssh keys, or re-capture the eval on this machine so source_path applies. Attempts:\n  %s",
+		repo, strings.Join(errs, "\n  "))
 }
 
 func gitFetch(ctx context.Context, dir string) error {
